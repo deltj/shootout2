@@ -58,6 +58,14 @@ static const uint8_t u8aRadiotapHeader[] =
     0x08, 0x00,
 };
 
+struct radiotap_header
+{
+    uint8_t revision;	
+    uint8_t pad;
+    uint16_t len;
+    uint32_t flags;
+} __attribute__((packed));
+
 struct ieee80211_hdr_3addr
 {
     uint16_t frame_ctl;
@@ -66,7 +74,7 @@ struct ieee80211_hdr_3addr
     unsigned char addr2[ETH_ALEN];
     unsigned char addr3[ETH_ALEN];
     uint16_t seq_ctl;
-};
+} __attribute__((packed));
 
 void hexdump(const uint8_t *buf, const int &buf_len)
 {
@@ -93,8 +101,13 @@ int make_beacon(uint8_t *buf, const int &buf_len,
 {
     int offset = 0;
 
-    memcpy(buf, u8aRadiotapHeader, sizeof(u8aRadiotapHeader));
-    offset += sizeof(u8aRadiotapHeader);
+    //memcpy(buf, u8aRadiotapHeader, sizeof(u8aRadiotapHeader));
+    //offset += sizeof(u8aRadiotapHeader);
+    struct radiotap_header rth;
+    memset(&rth, 0, sizeof(radiotap_header));
+    rth.len = sizeof(radiotap_header);
+    memcpy(buf, &rth, sizeof(radiotap_header));
+    offset += sizeof(radiotap_header);
 
     //  Set up a beacon header
     struct ieee80211_hdr_3addr hdr;
@@ -129,7 +142,7 @@ int make_beacon(uint8_t *buf, const int &buf_len,
     memcpy(buf + offset, rates, sizeof(rates));
     offset += sizeof(rates);
 
-    offset += 4; //fcs
+    //offset += 4; //fcs
 
     return offset;
 }
@@ -162,14 +175,14 @@ int main(int argc, char *argv[])
     */
 
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t *p = pcap_open_live("wlp7s0", 800, 1, 20, errbuf);
+    pcap_t *p = pcap_open_live("t2uh2", 800, 1, 20, errbuf);
     if(p == NULL)
     {
         fprintf(stderr, "pcap_open_live failed: %s\n", errbuf);
         return EXIT_FAILURE;
     }
 
-    if(pcap_sendpacket(p, pkt, len) == 0)
+    if(pcap_inject(p, pkt, len) != len)
     {
         pcap_perror(p, "pcap_sendpacket");
         pcap_close(p);
