@@ -1,7 +1,7 @@
 /**
- * Next-gen shootout
+ * Shootout2 - 802.11 monitor mode performance evaluator
  *
- * -Ted
+ * Copyright 2020 Ted DeLoggio <deltj@outlook.com>
  */
 #include <algorithm>
 #include <cstdint>
@@ -147,6 +147,9 @@ int make_beacon(uint8_t *buf, const int &buf_len,
     return offset;
 }
 
+/**
+ * Program entry point
+ */
 int main(int argc, char *argv[])
 {
     uint8_t amac[ETH_ALEN] = { 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC };
