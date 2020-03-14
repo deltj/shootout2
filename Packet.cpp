@@ -29,13 +29,19 @@ Packet::Packet(const Packet &src) :
 {
     if(dataLength != 0 && src.data != nullptr)
     {
-        data = std::make_unique<char[]>(dataLength);
-        std::copy(src.data.get(), src.data.get() + dataLength, data.get());
+        data = new uint8_t[dataLength];
+        memcpy(data, src.data, dataLength);
     }
 }
 
 Packet::~Packet()
 {
+    if(data == nullptr)
+    {
+        delete data;
+        data = nullptr;
+        dataLength = 0;
+    }
 }
 
 Packet& Packet::operator=(const Packet& src)
@@ -48,15 +54,15 @@ Packet& Packet::operator=(const Packet& src)
 
         if(dataLength != 0 && src.data != nullptr)
         {
-            data = std::make_unique<char[]>(dataLength);
-            std::copy(src.data.get(), src.data.get() + dataLength, data.get());
+            data = new uint8_t[dataLength];
+            memcpy(data, src.data, dataLength);
         }
     }
 
     return *this;
 }
 
-int Packet::getData(uint8_t *const buf, const int &bufLen)
+int Packet::getData(uint8_t *const buf, const size_t bufLen)
 {
     if(buf == nullptr)
     {
@@ -68,35 +74,55 @@ int Packet::getData(uint8_t *const buf, const int &bufLen)
         return 0;
     }
 
-    memcpy(buf, data.get(), dataLength);
+    if(data != nullptr)
+    {
+        memcpy(buf, data, dataLength);
+    }
 
     return dataLength;
 }
 
-bool Packet::setData(const uint8_t *const buf, const int &bufLen)
+bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
 {
     if(buf == nullptr)
     {
         return false;
     }
 
+    if(data != nullptr)
+    {
+        delete data;
+    }
+
     dataLength = bufLen;
 
-    data = std::make_unique<char[]>(bufLen);
-
-    memcpy(data.get(), buf, dataLength);
+    data = new uint8_t[dataLength];
+    memcpy(data, buf, dataLength);
 
     return true;
 }
 
 void Packet::getHash(uint8_t hash[32]) const
 {
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data.get(), dataLength);
-    SHA256_Final(hash, &sha256);
-}
+    static const uint8_t emptyHash[] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
 
+    if(data == nullptr)
+    {
+        memcpy(hash, emptyHash, 32);
+    }
+    else
+    {
+        SHA256_CTX sha256;
+        SHA256_Init(&sha256);
+        SHA256_Update(&sha256, data, dataLength);
+        SHA256_Final(hash, &sha256);
+    }
+}
 
 }
 
