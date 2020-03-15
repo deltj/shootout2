@@ -14,15 +14,14 @@
 extern "C" {
 #include <signal.h>
 #include <unistd.h>
+#include <pcap.h>
 }
 
 #include "Packet.h"
 
 bool quit = false;
-std::queue<shootout::Packet> packetQueue;
-std::mutex packetQueueMutex;
-std::set<std::array<uint8_t, 32>> hashSet;
-std::mutex hashSetMutex;
+std::mutex packetSetMutex;
+shootout::PacketSet packetSet;
 
 void sighandler(int signum)
 {
@@ -32,85 +31,56 @@ void sighandler(int signum)
     }
 }
 
-//  used for testing only
-void fakePacketThread()
+void captureThreadFn()
 {
+    char errbuf[PCAP_ERRBUF_SIZE];
+
+    printf("pcap_open_live\n");
+    pcap_t *p = pcap_open_live("wlp7s0", 800, 1, 20, errbuf);
+    if(p == NULL)
+    {
+        fprintf(stderr, "pcap_open_live failed: %s\n", errbuf);
+        return;
+    }
+
+    struct pcap_pkthdr *hdr;
+    const uint8_t *data;
+    //uint8_t hash[32];
+
     while(!quit)
     {
-        //  Generate random data to test packet hashing
-        uint8_t randomData[1000];
-        for(int i=0; i<1000; ++i)
-        {
-            randomData[i] = rand() * 255;
-        }
+        pcap_next_ex(p, &hdr, &data);
+
         shootout::Packet p;
-        p.ifindex = 1;
-        p.setData(randomData, 1000);
+        p.setData(data, hdr->len);
 
         /*
-        uint8_t hash[32];
         p.getHash(hash);
         for(int i=0; i<32; ++i)
             printf("%02X", hash[i]);
         printf("\n");
         */
 
-        packetQueueMutex.lock();
-        packetQueue.push(p);
-        packetQueueMutex.unlock();
+        packetSetMutex.lock();
+        packetSet.insert(p);
+        packetSetMutex.unlock();
     }
-}
 
-void packetBinner()
-{
-    while(!quit)
-    {
-        packetQueueMutex.lock();
-        if(packetQueue.size() > 0)
-        {
-            shootout::Packet p = packetQueue.front();
-
-            std::array<uint8_t, 32> hash;
-            //uint8_t hash[32];
-            p.getHash(hash.data());
-            /*
-            for(int i=0; i<32; ++i)
-                printf("%02X", hash[i]);
-            printf("\n");
-            */
-
-            hashSetMutex.lock();
-            //TODO: make separate sets for each wifi card
-            hashSet.insert(hash);
-            hashSetMutex.unlock();
-
-            packetQueue.pop();
-        }
-        packetQueueMutex.unlock();
-    }
+    pcap_close(p);
 }
 
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sighandler);
 
-    std::thread packetThread(fakePacketThread);
-    std::thread binnerThread(packetBinner);
-
+    printf("starting thread\n");
+    std::thread testThread(captureThreadFn);
     while(!quit)
     {
-        packetQueueMutex.lock();
-        printf("packetQueue size: %lu\n", packetQueue.size());
-        packetQueueMutex.unlock();
-
-        hashSetMutex.lock();
-        printf("hashSet size: %lu\n", hashSet.size());
-        hashSetMutex.unlock();
-
+        printf("packets: %lu\n", packetSet.size());
         sleep(1);
     }
-    packetThread.join();
-    binnerThread.join();
+    testThread.join();
 
     return EXIT_SUCCESS;
 }
