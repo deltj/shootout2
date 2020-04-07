@@ -9,6 +9,7 @@ matrix:
         apt:
           packages:
             - libpcap-dev
+            - libboost-all-dev
     
 script:
   - mkdir build
