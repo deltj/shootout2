@@ -1,11 +1,14 @@
 language: cpp
-compiler: gcc
-dist: bionic
 
-addons:
-  apt:
-    packages:
-      - libpcap-dev
+matrix:
+  include:
+    - os: linux
+    compiler: gcc
+    dist: bionic
+    addons:
+      apt:
+        packages:
+          - libpcap-dev
     
 script:
   - mkdir build
