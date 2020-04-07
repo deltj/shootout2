@@ -14,6 +14,36 @@ extern "C" {
 namespace shootout
 {
 
+PacketHash::PacketHash() 
+{
+    memcpy(hash, emptyHash, 32);
+}
+
+PacketHash::PacketHash(const uint8_t h[32])
+{
+    memcpy(hash, h, 32);
+}
+
+bool PacketHash::operator==(const PacketHash &rhs) const
+{
+    return memcmp(hash, rhs.hash, 32) == 0;
+}
+
+bool PacketHash::operator!=(const PacketHash &rhs) const
+{
+    return !(*this == rhs);
+}
+
+bool PacketHash::operator<(const PacketHash &rhs) const
+{
+    return memcmp(hash, rhs.hash, 32) < 0;
+}
+
+bool PacketHash::operator>(const PacketHash &rhs) const
+{
+    return memcmp(hash, rhs.hash, 32) > 0;
+}
+
 Packet::Packet() :
     timeOfReceipt(std::chrono::system_clock::now()),
     ifindex(-1),
@@ -99,29 +129,12 @@ bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
     data = new uint8_t[dataLength];
     memcpy(data, buf, dataLength);
 
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, data, dataLength);
+    SHA256_Final(hash.hash, &sha256);
+
     return true;
-}
-
-void Packet::getHash(uint8_t hash[32]) const
-{
-    static const uint8_t emptyHash[] = {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-    };
-
-    if(data == nullptr)
-    {
-        memcpy(hash, emptyHash, 32);
-    }
-    else
-    {
-        SHA256_CTX sha256;
-        SHA256_Init(&sha256);
-        SHA256_Update(&sha256, data, dataLength);
-        SHA256_Final(hash, &sha256);
-    }
 }
 
 }

@@ -14,6 +14,30 @@
 namespace shootout
 {
 
+static const uint8_t emptyHash[] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+/**
+ * This class wraps a 256-bit hash value for use with STL containers
+ */
+class PacketHash
+{
+public:
+    PacketHash();
+    PacketHash(const uint8_t h[32]);
+
+    bool operator==(const PacketHash &rhs) const;
+    bool operator!=(const PacketHash &rhs) const;
+    bool operator<(const PacketHash &rhs) const;
+    bool operator>(const PacketHash &rhs) const;
+
+    uint8_t hash[32];
+};
+
 /**
  * This class represents a packet that has been received by an interface in 
  * monitor mode.
@@ -21,19 +45,19 @@ namespace shootout
 class Packet
 {
 public:
-    //! Default constructor
+    //!  Default constructor
     Packet();
 
-    //! Copy constructor
+    //!  Copy constructor
     Packet(const Packet &src);
 
-    //! Move constructor
+    //!  Move constructor
     Packet(Packet &&src) = delete;
 
-    //! Destructor
+    //!  Destructor
     virtual ~Packet();
 
-    //! Copy-assignment operator
+    //!  Copy-assignment operator
     Packet& operator=(const Packet& src);
 
     /**
@@ -54,34 +78,32 @@ public:
      */
     bool setData(const uint8_t *const buf, const size_t bufLen);
 
-    void getHash(uint8_t hash[64]) const;
-
-    //! The time at which this packet was received
+    //!  The time at which this packet was received
     std::chrono::system_clock::time_point timeOfReceipt;
 
-    //! The interface that received the packet
+    //!  The interface that received the packet
     int ifindex;
 
-    //! The length in bytes of the packet's contents
+    //!  The length in bytes of the packet's contents
     size_t dataLength;
 
-    //! The contents of the packet
+    //!  The contents of the packet
     uint8_t *data;
+
+    //!  A SHA-256 hash of the packet's contents
+    PacketHash hash;
 };
 
 struct PacketComparator
 {
     bool operator()(const Packet &a, const Packet &b) const
     {
-        uint8_t ahash[32], bhash[32];
-        a.getHash(ahash);
-        b.getHash(bhash);
-
-        return memcmp(ahash, bhash, 32) == 0;
+        return a.hash != b.hash;
     }
 };
 
 typedef std::multiset<Packet, PacketComparator> PacketSet;
+typedef std::set<PacketHash> PacketHashSet;
 
 }
 
