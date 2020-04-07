@@ -3,12 +3,12 @@ language: cpp
 matrix:
   include:
     - os: linux
-    compiler: gcc
-    dist: bionic
-    addons:
-      apt:
-        packages:
-          - libpcap-dev
+      compiler: gcc
+      dist: bionic
+      addons:
+        apt:
+          packages:
+            - libpcap-dev
     
 script:
   - mkdir build
