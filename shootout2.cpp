@@ -4,6 +4,7 @@
  * Copyright 2020 Ted DeLoggio <deltj@outlook.com>
  */
 #include <array>
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -25,6 +26,7 @@ bool quit = false;
 //  A queue for received packets
 std::queue<shootout::Packet> packetQueue;
 std::mutex packetQueueMutex;
+std::condition_variable packetQueueCv;
 
 //  All hashes
 std::set<shootout::PacketHash> allHashes;
@@ -78,9 +80,14 @@ void captureThreadFn()
         shootout::Packet p;
         p.setData(data, hdr->len);
 
-        packetQueueMutex.lock();
-        packetQueue.push(p);
-        packetQueueMutex.unlock();
+        //  Lock the packetQueue mutex and push the new Packet
+        {
+            std::lock_guard<std::mutex> lk(packetQueueMutex);
+            packetQueue.push(p);
+        }
+
+        //  Let everyone know there's a new Packet
+        packetQueueCv.notify_all();
     }
 
     pcap_close(p);
@@ -90,31 +97,28 @@ void statThreadFn()
 {
     while(!quit)
     {
-        //TODO: Improve this processing loop with a condition variable, or
-        //something else less dumb than this.
+        //  Wait for notification that there's a new Packet to process
+        std::unique_lock<std::mutex> lk(packetQueueMutex);
+        packetQueueCv.wait(lk);
 
-        packetQueueMutex.lock();
-
-        if(packetQueue.empty())
+        //  The packet queue mutex is locked, process the queue
+        while(!packetQueue.empty())
         {
-            packetQueueMutex.unlock();
-            continue;
+            shootout::Packet p = packetQueue.front();
+            packetQueue.pop();
+
+            //  Take note that this hash has been observed
+            allHashesMutex.lock();
+            allHashes.insert(p.hash);
+            allHashesMutex.unlock();
+
+            //  Take note of which interface has observed the hash
+            hashesByInterfaceMutex.lock();
+            hashesByInterface[p.ifindex].insert(p.hash);
+            hashesByInterfaceMutex.unlock();
         }
 
-        shootout::Packet p = packetQueue.front();
-        packetQueue.pop();
-
-        packetQueueMutex.unlock();
-
-        //  Take note that this hash has been observed
-        allHashesMutex.lock();
-        allHashes.insert(p.hash);
-        allHashesMutex.unlock();
-
-        //  Take note of which interface has observed the hash
-        hashesByInterfaceMutex.lock();
-        hashesByInterface[p.ifindex].insert(p.hash);
-        hashesByInterfaceMutex.unlock();
+        lk.unlock();
     }
 }
 
