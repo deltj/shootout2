@@ -1,15 +1,23 @@
 language: cpp
 
+addons:
+  apt:
+    packages:
+      - libpcap-dev
+      - libboost-all-dev
+
 matrix:
   include:
-    - os: linux
+    - name: "bionic/amd64/gcc"
+      os: linux
       compiler: gcc
       dist: bionic
-      addons:
-        apt:
-          packages:
-            - libpcap-dev
-            - libboost-all-dev
+      arch: amd64
+    - name: "bionic/arm64/gcc"
+      os: linux
+      compiler: gcc
+      dist: bionic
+      arch: arm64
     
 script:
   - mkdir build
