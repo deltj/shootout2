@@ -17,7 +17,7 @@ add_executable(shootout2
     Packet.cpp)
 
 target_link_libraries(shootout2
-    ${PCAP_LIBRARIES}
+    -lpcap
     ${OPENSSL_LIBRARIES}
     pthread
     )
