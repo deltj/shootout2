@@ -1,5 +1,6 @@
 language: cpp
 compiler: gcc
+dist: bionic
 
 addons:
   apt:
