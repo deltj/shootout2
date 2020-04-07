@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -g")
 include_directories(${CMAKE_SOURCE_DIR})
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(PCAP REQUIRED libpcap)
+#pkg_check_modules(PCAP REQUIRED libpcap)
 pkg_check_modules(OPENSSL REQUIRED openssl)
 
 add_executable(shootout2
