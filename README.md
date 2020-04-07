@@ -1,6 +1,6 @@
 # shootout2
 
-https://travis-ci.com/deltj/shootout2.svg?branch=master
+[![Build Status](https://travis-ci.com/deltj/shootout2.svg?branch=master)](https://travis-ci.com/deltj/shootout2)
 
 ## Project Overview
 
