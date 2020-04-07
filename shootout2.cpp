@@ -5,10 +5,11 @@
  */
 #include <array>
 #include <cstdlib>
+#include <iostream>
 #include <map>
 #include <mutex>
-#include <queue>
 #include <set>
+#include <queue>
 #include <thread>
 
 extern "C" {
@@ -21,12 +22,17 @@ extern "C" {
 
 bool quit = false;
 
-//  Set of packets received by all interfaces
-shootout::PacketSet allPackets;
-std::mutex allPacketsMutex;
+//  A queue for received packets
+std::queue<shootout::Packet> packetQueue;
+std::mutex packetQueueMutex;
 
-//  Packet hashes observed by interfaces
-shootout::PacketHashSet hashesByInterface;
+//  All hashes
+std::set<shootout::PacketHash> allHashes;
+std::mutex allHashesMutex;
+
+//  Hashes by interface
+std::map<int, std::set<shootout::PacketHash> > hashesByInterface;
+std::mutex hashesByInterfaceMutex;
 
 void sighandler(int signum)
 {
@@ -60,14 +66,21 @@ void captureThreadFn()
         //  Wait for a packet from libpcap
         pcap_next_ex(p, &hdr, &data);
 
-        //  Make a new Packet object for it
+        //  Note from the man page for pcap_next_ex:
+        //  The struct pcap_pkthdr and the packet data are not to be freed by
+        //  the caller, and are not guaranteed to be valid after the next call
+        //  to pcap_next_ex(), pcap_next(), pcap_loop(3PCAP), or
+        //  pcap_dispatch(3PCAP); if the code needs them to remain valid, it
+        //  must make a copy of them.
+        //  See: https://www.tcpdump.org/manpages/pcap_next_ex.3pcap.html
+
+        //  Make a new Packet object for the received packet
         shootout::Packet p;
         p.setData(data, hdr->len);
 
-        //  Add the new Packet to the packet set
-        allPacketsMutex.lock();
-        allPackets.insert(p);
-        allPacketsMutex.unlock();
+        packetQueueMutex.lock();
+        packetQueue.push(p);
+        packetQueueMutex.unlock();
     }
 
     pcap_close(p);
@@ -75,66 +88,35 @@ void captureThreadFn()
 
 void statThreadFn()
 {
-    //  Packets in the packet set newer than this threshold will be ignored. 
-    //  The thought here is to allow all interfaces time to receive the same
-    //  frame.  This will likely go away once the program is generating its own 
-    //  packets.
-    //std::chrono::duration<int, std::milli> threshold(10);
-
     while(!quit)
     {
-        allPacketsMutex.lock();
+        //TODO: Improve this processing loop with a condition variable, or
+        //something else less dumb than this.
 
-        //  Iterate the packet set
-        shootout::PacketSet::iterator it = allPackets.begin();
-        while(it != allPackets.end())
+        packetQueueMutex.lock();
+
+        if(packetQueue.empty())
         {
-            shootout::PacketSet::iterator cit = it++;
-
-            hashesByInterface.insert(it->hash);
+            packetQueueMutex.unlock();
+            continue;
         }
-        allPacketsMutex.unlock();
 
-        sleep(1);
+        shootout::Packet p = packetQueue.front();
+        packetQueue.pop();
+
+        packetQueueMutex.unlock();
+
+        //  Take note that this hash has been observed
+        allHashesMutex.lock();
+        allHashes.insert(p.hash);
+        allHashesMutex.unlock();
+
+        //  Take note of which interface has observed the hash
+        hashesByInterfaceMutex.lock();
+        hashesByInterface[p.ifindex].insert(p.hash);
+        hashesByInterfaceMutex.unlock();
     }
 }
-
-/**
- * This thread prunes old packets from the set
- */
-/*
-void pruningThreadFn()
-{
-    //  Packets in the packet set older than this threshold duration will be 
-    //  pruned to make room for new packets.  
-    std::chrono::duration<int, std::milli> threshold(100);
-
-    while(!quit)
-    {
-        std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-
-        //  The packet set must be locked during pruning
-        allPacketsMutex.lock();
-        shootout::PacketSet::iterator it = allPackets.begin();
-        while(it != allPackets.end())
-        {
-            shootout::PacketSet::iterator cit = it++;
-
-            std::chrono::duration<int, std::milli> ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(now - cit->timeOfReceipt);
-
-            if(ms > threshold)
-            {
-                allPackets.erase(cit);
-            }
-
-        }
-        allPacketsMutex.unlock();
-
-        sleep(1);
-    }
-}
-*/
 
 int main(int argc, char *argv[])
 {
@@ -143,17 +125,32 @@ int main(int argc, char *argv[])
     printf("starting threads\n");
     std::thread captureThread(captureThreadFn);
     std::thread statThread(statThreadFn);
-    //std::thread pruningThread(pruningThreadFn);
 
     while(!quit)
     {
-        printf("packets in the set: %lu\n", allPackets.size());
+        printf("\n");
+
+        packetQueueMutex.lock();
+        printf("Packets waiting to be processed: %lu\n", packetQueue.size());
+        packetQueueMutex.unlock();
+
+        allHashesMutex.lock();
+        printf("All hashes: %lu\n", allHashes.size());
+        allHashesMutex.unlock();
+
+        hashesByInterfaceMutex.lock();
+        std::map<int, std::set<shootout::PacketHash> >::const_iterator it;
+        for(it = hashesByInterface.begin(); it != hashesByInterface.end(); ++it)
+        {
+            printf("Hashes for interface %d: %lu\n", it->first, it->second.size());
+        }
+        hashesByInterfaceMutex.unlock();
+
         sleep(1);
     }
 
     captureThread.join();
     statThread.join();
-    //pruningThread.join();
 
     return EXIT_SUCCESS;
 }

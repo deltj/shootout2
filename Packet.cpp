@@ -6,6 +6,8 @@
 #include "Packet.h"
 
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 
 extern "C" {
 #include "openssl/sha.h"
@@ -16,17 +18,28 @@ namespace shootout
 
 PacketHash::PacketHash() 
 {
-    memcpy(hash, emptyHash, 32);
+    memcpy(hash, emptyHash, HASH_SIZE);
 }
 
-PacketHash::PacketHash(const uint8_t h[32])
+PacketHash::PacketHash(const uint8_t h[HASH_SIZE])
 {
-    memcpy(hash, h, 32);
+    memcpy(hash, h, HASH_SIZE);
+}
+
+std::string PacketHash::toString() const
+{
+    std::stringstream ss;
+    for(size_t i=0; i<HASH_SIZE; ++i)
+    {
+        ss << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << int(hash[i]);
+    }
+
+    return ss.str();
 }
 
 bool PacketHash::operator==(const PacketHash &rhs) const
 {
-    return memcmp(hash, rhs.hash, 32) == 0;
+    return memcmp(hash, rhs.hash, HASH_SIZE) == 0;
 }
 
 bool PacketHash::operator!=(const PacketHash &rhs) const
@@ -36,12 +49,12 @@ bool PacketHash::operator!=(const PacketHash &rhs) const
 
 bool PacketHash::operator<(const PacketHash &rhs) const
 {
-    return memcmp(hash, rhs.hash, 32) < 0;
+    return memcmp(hash, rhs.hash, HASH_SIZE) < 0;
 }
 
 bool PacketHash::operator>(const PacketHash &rhs) const
 {
-    return memcmp(hash, rhs.hash, 32) > 0;
+    return memcmp(hash, rhs.hash, HASH_SIZE) > 0;
 }
 
 Packet::Packet() :
@@ -55,7 +68,8 @@ Packet::Packet() :
 Packet::Packet(const Packet &src) :
     timeOfReceipt(src.timeOfReceipt),
     ifindex(src.ifindex),
-    dataLength(src.dataLength)
+    dataLength(src.dataLength),
+    hash(src.hash)
 {
     if(dataLength != 0 && src.data != nullptr)
     {

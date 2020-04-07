@@ -26,42 +26,7 @@ static const uint8_t testHash2[32] = {
     0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55
 };
 
-BOOST_AUTO_TEST_CASE( PacketHash_Operators )
-{
-    shootout::PacketHash ph1(testHash1);
-    shootout::PacketHash ph2(testHash2);
-    shootout::PacketHash ph3(testHash1);
-
-    BOOST_CHECK(ph1 != ph2);
-    BOOST_CHECK(ph1 == ph3);
-    BOOST_CHECK(ph1 < ph2);
-    BOOST_CHECK(ph2 > ph1);
-}
-
-BOOST_AUTO_TEST_CASE( PacketHash_Vector )
-{
-    std::vector<shootout::PacketHash> phv;
-
-    shootout::PacketHash ph1(testHash1);
-    phv.push_back(ph1);
-
-    BOOST_CHECK_EQUAL(1, phv.size());
-}
-
-BOOST_AUTO_TEST_CASE( PacketHash_Set )
-{
-    std::set<shootout::PacketHash> phs;
-
-    shootout::PacketHash ph1(testHash1);
-    shootout::PacketHash ph2(testHash2);
-
-    phs.insert(ph1);
-    phs.insert(ph2);
-
-    BOOST_CHECK_EQUAL(2, phs.size());
-}
-
-BOOST_AUTO_TEST_CASE( Ctor )
+BOOST_AUTO_TEST_CASE( Packet_Ctor )
 {
     shootout::Packet p;
 
@@ -69,7 +34,7 @@ BOOST_AUTO_TEST_CASE( Ctor )
     BOOST_CHECK_EQUAL(nullptr, p.data);
 }
 
-BOOST_AUTO_TEST_CASE( CopyCtor )
+BOOST_AUTO_TEST_CASE( Packet_CopyCtor )
 {
     uint8_t data[100];
     for(int i=0; i<100; i++)
@@ -88,7 +53,7 @@ BOOST_AUTO_TEST_CASE( CopyCtor )
         BOOST_CHECK_EQUAL(0x55, copiedPacketdata[i]);
 }
 
-BOOST_AUTO_TEST_CASE( GetSetData )
+BOOST_AUTO_TEST_CASE( Packet_GetSetData )
 {
     uint8_t data[100];
 
@@ -109,7 +74,7 @@ BOOST_AUTO_TEST_CASE( GetSetData )
         BOOST_CHECK_EQUAL(0x55, copiedPacketdata[i]);
 }
 
-BOOST_AUTO_TEST_CASE( GetEmptyPacket )
+BOOST_AUTO_TEST_CASE( Packet_GetEmptyPacket )
 {
     shootout::Packet p;
 
@@ -120,7 +85,7 @@ BOOST_AUTO_TEST_CASE( GetEmptyPacket )
     BOOST_CHECK_EQUAL(0, numCopied);
 }
 
-BOOST_AUTO_TEST_CASE( GetNullBuff )
+BOOST_AUTO_TEST_CASE( Packet_GetNullBuff )
 {
     uint8_t data[100];
 
@@ -134,7 +99,7 @@ BOOST_AUTO_TEST_CASE( GetNullBuff )
     BOOST_CHECK_EQUAL(0, numCopied);
 }
 
-BOOST_AUTO_TEST_CASE( GetBuffTooSmall )
+BOOST_AUTO_TEST_CASE( Packet_GetBuffTooSmall )
 {
     uint8_t data[100];
 
@@ -148,7 +113,7 @@ BOOST_AUTO_TEST_CASE( GetBuffTooSmall )
     BOOST_CHECK_EQUAL(0, numCopied);
 }
 
-BOOST_AUTO_TEST_CASE( Hash )
+BOOST_AUTO_TEST_CASE( Packet_Hash )
 {
     uint8_t data1[100];
     for(int i=0; i<100; i++)
@@ -185,7 +150,7 @@ BOOST_AUTO_TEST_CASE( Hash )
     BOOST_CHECK(compare == 0);
 }
 
-BOOST_AUTO_TEST_CASE( Set )
+BOOST_AUTO_TEST_CASE( Packet_Set )
 {
     uint8_t data1[100];
     for(int i=0; i<100; i++)
@@ -204,7 +169,7 @@ BOOST_AUTO_TEST_CASE( Set )
     shootout::Packet p3;
     p3.setData(data2, 100);
 
-    shootout::PacketSet ps;
+    std::multiset<shootout::Packet, shootout::PacketComparator> ps;
     ps.insert(p1);
     ps.insert(p2);
     ps.insert(p3);

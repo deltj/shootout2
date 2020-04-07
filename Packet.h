@@ -9,10 +9,12 @@
 #include <chrono>
 #include <cstring>
 #include <memory>
-#include <set>
+#include <string>
 
 namespace shootout
 {
+
+static const size_t HASH_SIZE = 32;
 
 static const uint8_t emptyHash[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -28,14 +30,16 @@ class PacketHash
 {
 public:
     PacketHash();
-    PacketHash(const uint8_t h[32]);
+    PacketHash(const uint8_t h[HASH_SIZE]);
+
+    std::string toString() const;
 
     bool operator==(const PacketHash &rhs) const;
     bool operator!=(const PacketHash &rhs) const;
     bool operator<(const PacketHash &rhs) const;
     bool operator>(const PacketHash &rhs) const;
 
-    uint8_t hash[32];
+    uint8_t hash[HASH_SIZE];
 };
 
 /**
@@ -101,9 +105,6 @@ struct PacketComparator
         return a.hash != b.hash;
     }
 };
-
-typedef std::multiset<Packet, PacketComparator> PacketSet;
-typedef std::set<PacketHash> PacketHashSet;
 
 }
 
