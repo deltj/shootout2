@@ -4,6 +4,7 @@ compiler: gcc
 addons:
   apt:
     packages:
+      - libpcap
       - libpcap-dev
     
 script:
