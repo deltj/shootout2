@@ -8,8 +8,8 @@ matrix:
       addons:
         apt:
           packages:
-            - libpcap
-            - libpcap-dev
+            - libpcap0.8
+            - libpcap0.8-dev
     
 script:
   - mkdir build
