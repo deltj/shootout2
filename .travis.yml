@@ -1,6 +1,11 @@
 language: cpp
 compiler: gcc
 
+addons:
+  apt:
+    packages:
+      - libpcap-dev
+    
 script:
   - mkdir build
   - cd build
