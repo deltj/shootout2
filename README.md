@@ -1,5 +1,7 @@
 # shootout2
 
+[![Build Status](https://travis-ci.com/deltj/shootout2.svg?branch=master)](https://travis-ci.com/deltj/shootout2)
+
 ## Project Overview
 
 This tool is an evolution of the previous Kismet-based shootout ([https://github.com/deltj/kis_shootout_python]).  The previous shootout tool has some shortcomings that this tool aims to address:

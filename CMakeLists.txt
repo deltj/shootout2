@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -g")
 include_directories(${CMAKE_SOURCE_DIR})
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(PCAP REQUIRED libpcap)
+#pkg_check_modules(PCAP REQUIRED libpcap)
 pkg_check_modules(OPENSSL REQUIRED openssl)
 
 add_executable(shootout2
@@ -17,12 +17,12 @@ add_executable(shootout2
     Packet.cpp)
 
 target_link_libraries(shootout2
-    ${PCAP_LIBRARIES}
+    -lpcap
     ${OPENSSL_LIBRARIES}
     pthread
     )
 
-install(TARGETS shootout2)
+#install(TARGETS shootout2)
 
 add_executable(Packet_test
     Packet.cpp
