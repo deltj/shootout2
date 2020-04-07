@@ -22,7 +22,7 @@ target_link_libraries(shootout2
     pthread
     )
 
-install(TARGETS shootout2)
+#install(TARGETS shootout2)
 
 add_executable(Packet_test
     Packet.cpp
