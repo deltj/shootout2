@@ -128,6 +128,8 @@ int Packet::getData(uint8_t *const buf, const size_t bufLen)
 
 bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
 {
+    size_t hash_offset = 0;
+
     if(buf == nullptr)
     {
         return false;
@@ -138,14 +140,31 @@ bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
         delete data;
     }
 
+    //  Look for a radiotap header
+    if(bufLen > RT_HDR_SIZE)
+    {
+        const struct ieee80211_radiotap_header *rth =
+                reinterpret_cast<const struct ieee80211_radiotap_header *>(buf);
+        
+        //  As of April 2020, version is always zero
+        //  see: https://www.radiotap.org/
+        if(rth->it_version == 0)
+        {
+            //  This packet might have a radiotap header that must be skipped
+            //  for hashing
+            hash_offset = rth->it_len;
+        }
+    }
+
     dataLength = bufLen;
 
     data = new uint8_t[dataLength];
     memcpy(data, buf, dataLength);
 
+    //  Generate a SHA-256 hash over the packet data, considering the offset
     SHA256_CTX sha256;
     SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data, dataLength);
+    SHA256_Update(&sha256, data + hash_offset, dataLength - hash_offset);
     SHA256_Final(hash.hash, &sha256);
 
     return true;

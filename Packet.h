@@ -24,6 +24,18 @@ static const uint8_t emptyHash[] = {
 };
 
 /**
+ * Radiotap header structure
+ */
+struct ieee80211_radiotap_header {
+    u_int8_t        it_version;     /* set to 0 */
+    u_int8_t        it_pad;
+    u_int16_t       it_len;         /* entire length */
+    u_int32_t       it_present;     /* fields present */
+} __attribute__((__packed__));
+
+static const size_t RT_HDR_SIZE = sizeof(ieee80211_radiotap_header);
+
+/**
  * This class wraps a 256-bit hash value for use with STL containers
  */
 class PacketHash
@@ -45,6 +57,10 @@ public:
 /**
  * This class represents a packet that has been received by an interface in 
  * monitor mode.
+ *
+ * Note that packet hashes will exclude a radiotap header if one is present.
+ * This is to prevent identical packets received by different interfaces from
+ * appearing different because their RSSI values differ.
  */
 class Packet
 {
