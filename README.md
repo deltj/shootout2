@@ -28,6 +28,14 @@ On Ubuntu 18.04 LTS:
 
 ### Build
 
+```
+mkdir build
+cd build
+cmake ..
+make
+```
+
+### Usage
 The program needs to be run as root to capture from live interfaces.  Use -i to 
 specify the interfaces under test.
 
