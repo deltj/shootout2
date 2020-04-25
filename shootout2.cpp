@@ -22,6 +22,8 @@ extern "C" {
 
 #include "Packet.h"
 
+using namespace std::chrono_literals;
+
 bool quit = false;
 
 //  A queue for received packets
@@ -61,7 +63,7 @@ void sighandler(int signum)
  * This thread function captures packets from libpcap and adds them to the 
  * packet set.
  */
-void captureThreadFn(std::shared_ptr<NL80211Interface> ifc)
+void packetCaptureThreadFn(std::shared_ptr<NL80211Interface> ifc)
 {
     char errbuf[PCAP_ERRBUF_SIZE];
 
@@ -115,14 +117,18 @@ void captureThreadFn(std::shared_ptr<NL80211Interface> ifc)
     pcap_close(p);
 }
 
-void statThreadFn()
+void packetProcessingThreadFn()
 {
     while(!quit)
     {
-        //  Wait for notification that there's a new Packet to process
-        //TODO: add a lock timeout
+        /*
+        if(!packetQueueMutex.try_lock_for(std::chrono::milliseconds(100)))
+        {
+            continue;
+        }
+        */
         std::unique_lock<std::mutex> lk(packetQueueMutex);
-        packetQueueCv.wait(lk);
+        packetQueueCv.wait_for(lk, 100ms);
 
         //  The packet queue mutex is locked, process the queue
         while(!packetQueue.empty())
@@ -198,10 +204,10 @@ int main(int argc, char *argv[])
     for(std::vector<std::shared_ptr<NL80211Interface> >::iterator it = interfaces.begin();
             it != interfaces.end(); ++it)
     {
-        (*it)->thread = std::thread(captureThreadFn, *it);
+        (*it)->thread = std::thread(packetCaptureThreadFn, *it);
     }
 
-    std::thread statThread(statThreadFn);
+    std::thread packetProcessingThread(packetProcessingThreadFn);
 
     while(!quit)
     {
@@ -243,7 +249,7 @@ int main(int argc, char *argv[])
     }
 
     //TODO: join all the capture threads
-    statThread.join();
+    packetProcessingThread.join();
 
     return EXIT_SUCCESS;
 }

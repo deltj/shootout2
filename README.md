@@ -33,9 +33,11 @@ mkdir build
 cd build
 cmake ..
 make
+make test
 ```
 
 ### Usage
+
 The program needs to be run as root to capture from live interfaces.  Use -i to 
 specify the interfaces under test.
 
