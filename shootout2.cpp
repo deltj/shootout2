@@ -15,6 +15,7 @@
 
 extern "C" {
 #include <getopt.h>
+#include <ncurses.h>
 #include <pcap.h>
 #include <signal.h>
 #include <unistd.h>
@@ -117,16 +118,14 @@ void packetCaptureThreadFn(std::shared_ptr<NL80211Interface> ifc)
     pcap_close(p);
 }
 
+/**
+ * This thread function removes packets from the packet queue and updates the 
+ * hash lists.
+ */
 void packetProcessingThreadFn()
 {
     while(!quit)
     {
-        /*
-        if(!packetQueueMutex.try_lock_for(std::chrono::milliseconds(100)))
-        {
-            continue;
-        }
-        */
         std::unique_lock<std::mutex> lk(packetQueueMutex);
         packetQueueCv.wait_for(lk, 100ms);
 
@@ -151,6 +150,13 @@ void packetProcessingThreadFn()
     }
 }
 
+/**
+ * This function checks whether a hash has been observed by an interface.
+ *
+ * @param ifindex The interface index to check
+ * @param hash The hash to look for
+ * @return true if the hash was found, false otherwise
+ */
 bool interfaceHit(int ifindex, shootout::PacketHash hash)
 {
     std::unique_lock<std::mutex> lk(hitByInterfaceMutex);
@@ -160,6 +166,7 @@ bool interfaceHit(int ifindex, shootout::PacketHash hash)
 
 int main(int argc, char *argv[])
 {
+    int retval = EXIT_SUCCESS;
     srand(time(NULL));
     signal(SIGINT, sighandler);
 
@@ -186,6 +193,8 @@ int main(int argc, char *argv[])
                 std::shared_ptr<NL80211Interface> ifc =
                         std::make_shared<NL80211Interface>();
                 ifc->name = std::string(optarg);
+
+                //TODO: Use actual netlink ifindex
                 ifc->ifindex = rand() % 100;
 
                 interfaces.push_back(ifc);
@@ -200,6 +209,10 @@ int main(int argc, char *argv[])
 
     //TODO: Configure interfaces with netlink
 
+    //  Remember start time
+    std::chrono::time_point<std::chrono::system_clock> startTime =
+            std::chrono::system_clock::now();
+
     //  Start a capture thread for each interface
     for(std::vector<std::shared_ptr<NL80211Interface> >::iterator it = interfaces.begin();
             it != interfaces.end(); ++it)
@@ -207,11 +220,36 @@ int main(int argc, char *argv[])
         (*it)->thread = std::thread(packetCaptureThreadFn, *it);
     }
 
+    //  Start the packet processing thread
     std::thread packetProcessingThread(packetProcessingThreadFn);
 
+    //  Set up ncurses
+    initscr();
+    noecho();
+
+    int hours = 0;
+    int minutes = 0;
+    int seconds = 0;
     while(!quit)
     {
-        printf("\n");
+        std::chrono::time_point<std::chrono::system_clock> nowTime = 
+                std::chrono::system_clock::now();
+        std::chrono::seconds elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(nowTime - startTime);
+        if(elapsedTime >= 3600s)
+        {
+            hours = std::chrono::duration_cast<std::chrono::hours>(elapsedTime).count();
+            minutes = std::chrono::duration_cast<std::chrono::minutes>(elapsedTime % std::chrono::hours(hours)).count();
+            seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsedTime % std::chrono::minutes(minutes)).count();
+        }
+        else if(elapsedTime >= 60s)
+        {
+            minutes = std::chrono::duration_cast<std::chrono::minutes>(elapsedTime).count();
+            seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsedTime % std::chrono::minutes(minutes)).count();
+        }
+        else
+        {
+            seconds = elapsedTime.count();
+        }
 
         //packetQueueMutex.lock();
         //printf("Packets waiting to be processed: %lu\n", packetQueue.size());
@@ -221,8 +259,12 @@ int main(int argc, char *argv[])
         size_t totalPackets = allHashes.size();
         allHashesMutex.unlock();
 
-        printf("Total packets: %lu\n", totalPackets);
+        mvprintw(0, 1, "Test duration: %d hours, %d minutes, %d seconds\n", hours, minutes, seconds);
+        mvprintw(1, 1, "Unique packets observed: %lu\n", totalPackets);
 
+        //  Iterate interfaces under test
+        int row = 0;
+        int rowoffset = 0;
         for(std::vector<std::shared_ptr<NL80211Interface> >::iterator iit = interfaces.begin();
                 iit != interfaces.end(); ++iit)
         {
@@ -240,10 +282,19 @@ int main(int argc, char *argv[])
             }
             allHashesMutex.unlock();
 
+            row = 3 + rowoffset++;
+            mvprintw(row, 1,  "%d", (*iit)->ifindex);
+            mvprintw(row, 5,  "%s", (*iit)->name.c_str());
+            mvprintw(row, 20, "%lu", hitByInterface[(*iit)->ifindex].size());
+            mvprintw(row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
+
+            /*
             printf("Missed packets for %s: %lu (%0.1f)\n", (*iit)->name.c_str(),
                     missByInterface[(*iit)->ifindex].size(),
                     missByInterface[(*iit)->ifindex].size() / (double)totalPackets * 100);
+            */
         }
+        refresh();
 
         sleep(1);
     }
@@ -251,5 +302,6 @@ int main(int argc, char *argv[])
     //TODO: join all the capture threads
     packetProcessingThread.join();
 
-    return EXIT_SUCCESS;
+    endwin();
+    return retval;
 }
