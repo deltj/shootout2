@@ -91,14 +91,17 @@ uint32_t calcfcs(const uint8_t *const buf, const size_t bufLen)
 {
     uint32_t crc32 = 0xffffffff;
 
-    for(size_t i = 0; i < bufLen; i++)
+    if(buf != nullptr && bufLen > 0)
     {
-        crc32 = crc32_ccitt_table[(crc32 ^ buf[i]) & 0xff] ^ (crc32 >> 8);
-    }
+        for(size_t i = 0; i < bufLen; i++)
+        {
+            crc32 = crc32_ccitt_table[(crc32 ^ buf[i]) & 0xff] ^ (crc32 >> 8);
+        }
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    crc32 = __bswap_32(crc32);
+        crc32 = __bswap_32(crc32);
 #endif
+    }
 
     return ~crc32;
 }
@@ -232,15 +235,20 @@ bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
         delete data;
     }
 
+    dataLength = bufLen;
+
+    data = new uint8_t[dataLength];
+    memcpy(data, buf, dataLength);
+
     //  Look for a radiotap header
     if(bufLen > RT_HDR_SIZE)
     {
         const struct ieee80211_radiotap_header *rth =
-                reinterpret_cast<const struct ieee80211_radiotap_header *>(buf);
+                reinterpret_cast<const struct ieee80211_radiotap_header *>(data);
         
         //  As of April 2020, version is always zero
         //  see: https://www.radiotap.org/
-        if(rth->it_version == 0)
+        if(rth->it_version == 0 && rth->it_pad == 0)
         {
             //  This packet might have a radiotap header that must be skipped
             //  for hashing
@@ -248,17 +256,32 @@ bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
         }
     }
 
-    dataLength = bufLen;
+    //  There's a weird bug where somehow radiotapLength ends up being the same
+    //  as dataLength, which causes an integer overflow below.
+    //TODO: Diagnose the weird bug
+    if(radiotapLength == dataLength)
+    {
+        radiotapLength = 0;
+    }
 
-    data = new uint8_t[dataLength];
-    memcpy(data, buf, dataLength);
-
-    //  Figure out if there's an FCS
+    //  If the last 4 bytes match an FCS over the frame, not counting the 
+    //  radiotap header and last 4 bytes, the frame has an FCS present (and we
+    //  need to ignore it when hashing)
+    size_t fcsLength = 0;
+    uint32_t fcs = calcfcs(data + radiotapLength, dataLength - radiotapLength - 4);
+    if(data[dataLength - 4] == (uint8_t)(fcs >> 24) &&
+       data[dataLength - 3] == (uint8_t)(fcs >> 16) &&
+       data[dataLength - 2] == (uint8_t)(fcs >> 8) &&
+       data[dataLength - 1] == (uint8_t)(fcs))
+    {
+        //  Found an FCS
+        fcsLength = 4;
+    }
 
     //  Generate a SHA-256 hash over the packet data, considering the offset
     SHA256_CTX sha256;
     SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data + radiotapLength, dataLength - radiotapLength);
+    SHA256_Update(&sha256, data + radiotapLength, dataLength - radiotapLength - fcsLength);
     SHA256_Final(hash.hash, &sha256);
 
     return true;

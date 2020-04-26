@@ -270,6 +270,6 @@ BOOST_AUTO_TEST_CASE( IdenticalBeacons )
     shootout::Packet p1(pkt1517, 260);
     shootout::Packet p2(pkt85, 242);
 
-    //BOOST_CHECK(memcmp(p1.hash.hash, p2.hash.hash, 32) == 0);
+    BOOST_CHECK(memcmp(p1.hash.hash, p2.hash.hash, 32) == 0);
 }
 

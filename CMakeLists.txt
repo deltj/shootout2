@@ -4,7 +4,7 @@ project(shootout2)
 
 enable_testing()
 
-set(CMAKE_CXX_FLAGS "-std=c++17 -Wall")
+set(CMAKE_CXX_FLAGS "-g -std=c++17 -Wall")
 #-g -fprofile-arcs -ftest-coverage
 
 include_directories(${CMAKE_SOURCE_DIR})
