@@ -36,6 +36,16 @@ struct ieee80211_radiotap_header {
 static const size_t RT_HDR_SIZE = sizeof(ieee80211_radiotap_header);
 
 /**
+ * Calculate the CCITT CRC32 frame check sequence (FCS) for an IEEE 802.11 
+ * frame.
+ *
+ * @param buf The buffer to compute the FCS for
+ * @param bufLen The length of buf
+ * @returns the FCS
+ */
+uint32_t calcfcs(const uint8_t *const buf, const size_t bufLen);
+
+/**
  * This class wraps a 256-bit hash value for use with STL containers
  */
 class PacketHash
@@ -70,6 +80,9 @@ public:
 
     //!  Copy constructor
     Packet(const Packet &src);
+
+    //!  Constructor with packet data
+    Packet(const uint8_t *buf, const size_t bufLen);
 
     //!  Move constructor
     Packet(Packet &&src) = delete;
