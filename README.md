@@ -1,6 +1,6 @@
 # shootout2
 
-[![Build Status](https://travis-ci.com/deltj/shootout2.svg?branch=master)](https://travis-ci.com/deltj/shootout2) [![Coverage Status](https://coveralls.io/repos/github/deltj/shootout2/badge.svg)](https://coveralls.io/github/deltj/shootout2)
+[![Build Status](https://travis-ci.com/deltj/shootout2.svg?branch=master)](https://travis-ci.com/deltj/shootout2) [![Coverage Status](https://coveralls.io/repos/github/deltj/shootout2/badge.svg?branch=master)](https://coveralls.io/github/deltj/shootout2?branch=master)
 
 ## Project Overview
 
