@@ -13,6 +13,10 @@ matrix:
       compiler: gcc
       dist: bionic
       arch: amd64
+      before_install:
+        - pip install --user cpp-coveralls
+      after_success:
+        - coveralls --exclude lib --exclude tests --gcov-options '\-lp'
     - name: "bionic/arm64/gcc"
       os: linux
       compiler: gcc
