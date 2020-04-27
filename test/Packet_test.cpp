@@ -48,8 +48,7 @@ BOOST_AUTO_TEST_CASE( Packet_CopyCtor )
     for(int i=0; i<100; i++)
         data[i] = 0x55;
 
-    shootout::Packet p1;
-    p1.setData(data, 100);
+    shootout::Packet p1(data, 100);
 
     shootout::Packet p2 = p1;
 
@@ -57,8 +56,27 @@ BOOST_AUTO_TEST_CASE( Packet_CopyCtor )
     const int numCopied = p2.getData(copiedPacketdata, 100);
     BOOST_CHECK_EQUAL(100, numCopied);
 
-    for(int i=0; i<100; ++i)
-        BOOST_CHECK_EQUAL(0x55, copiedPacketdata[i]);
+    BOOST_CHECK(memcmp(data, copiedPacketdata, 100) == 0);
+    BOOST_CHECK(memcmp(p1.hash.hash, p2.hash.hash, 32) == 0);
+}
+
+BOOST_AUTO_TEST_CASE( Packet_AssignmentOperator )
+{
+    uint8_t data[100];
+    for(int i=0; i<100; i++)
+        data[i] = 0x55;
+
+    shootout::Packet p1(data, 100);
+
+    shootout::Packet p2;
+    p2 = p1;
+
+    uint8_t copiedPacketdata[100];
+    const int numCopied = p2.getData(copiedPacketdata, 100);
+    BOOST_CHECK_EQUAL(100, numCopied);
+
+    BOOST_CHECK(memcmp(data, copiedPacketdata, 100) == 0);
+    BOOST_CHECK(memcmp(p1.hash.hash, p2.hash.hash, 32) == 0);
 }
 
 BOOST_AUTO_TEST_CASE( Packet_GetSetData )

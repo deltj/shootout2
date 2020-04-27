@@ -16,7 +16,7 @@ matrix:
       before_install:
         - pip install --user cpp-coveralls
       after_success:
-        - coveralls --root .. --exclude test  --gcov-options '\-lp'
+        - coveralls --root .. --exclude test --exclude build --gcov-options '\-lp'
     - name: "bionic/arm64/gcc"
       os: linux
       compiler: gcc
