@@ -159,6 +159,7 @@ Packet::Packet(const Packet &src) :
     timeOfReceipt(src.timeOfReceipt),
     ifindex(src.ifindex),
     dataLength(src.dataLength),
+    data(nullptr),
     hash(src.hash)
 {
     if(dataLength != 0 && src.data != nullptr)
