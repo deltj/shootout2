@@ -1,6 +1,6 @@
 # shootout2
 
-[![Build Status](https://travis-ci.com/deltj/shootout2.svg?branch=master)](https://travis-ci.com/deltj/shootout2) [![Coverage Status](https://coveralls.io/repos/github/deltj/shootout2/badge.svg?branch=master)](https://coveralls.io/github/deltj/shootout2?branch=master)
+[![Build Status](https://travis-ci.com/deltj/shootout2.svg?branch=master)](https://travis-ci.com/deltj/shootout2) [![Coverage Status](https://coveralls.io/repos/github/deltj/shootout2/badge.svg?branch=master)](https://coveralls.io/github/deltj/shootout2?branch=master) [![Coverity Scan](https://scan.coverity.com/projects/20981/badge.svg)](a href="https://scan.coverity.com/projects/deltj-shootout2)
 
 ## Project Overview
 
