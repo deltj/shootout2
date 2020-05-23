@@ -1,6 +1,6 @@
 
 add_executable(PacketHash_test
-    ../Packet.cpp
+    ../src/Packet.cpp
     PacketHash_test.cpp)
 target_link_libraries(PacketHash_test
     ${OPENSSL_LIBRARIES}
@@ -8,7 +8,7 @@ target_link_libraries(PacketHash_test
 add_test(PacketHash_test PacketHash_test)
 
 add_executable(Packet_test
-    ../Packet.cpp
+    ../src/Packet.cpp
     Packet_test.cpp)
 target_link_libraries(Packet_test
     ${OPENSSL_LIBRARIES}
