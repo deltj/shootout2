@@ -19,6 +19,12 @@ extern "C" {
 #include <pcap.h>
 #include <signal.h>
 #include <unistd.h>
+
+#include <net/if.h>
+#include <netlink/netlink.h>
+#include <netlink/genl/genl.h>
+#include <netlink/genl/ctrl.h>
+#include <linux/nl80211.h>
 }
 
 #include "Packet.h"
@@ -190,12 +196,9 @@ int main(int argc, char *argv[])
                 printf("Using interface %s\n", optarg);
 
                 //  Set up a new interface
-                std::shared_ptr<NL80211Interface> ifc =
-                        std::make_shared<NL80211Interface>();
+                std::shared_ptr<NL80211Interface> ifc = std::make_shared<NL80211Interface>();
                 ifc->name = std::string(optarg);
-
-                //TODO: Use actual netlink ifindex
-                ifc->ifindex = rand() % 100;
+                ifc->ifindex = if_nametoindex(optarg);
 
                 interfaces.push_back(ifc);
             }
@@ -214,10 +217,44 @@ int main(int argc, char *argv[])
             std::chrono::system_clock::now();
 
     //  Start a capture thread for each interface
+    int ret;
     for(std::vector<std::shared_ptr<NL80211Interface> >::iterator it = interfaces.begin();
             it != interfaces.end(); ++it)
     {
+        int freqMhz = 2412;
+        
+        struct nl_sock *sckt = nl_socket_alloc();
+        genl_connect(sckt);
+        
+        std::cout << "Configuring " << (*it)->name << " (ifindex " << (*it)->ifindex << ")" << std::endl;
+
+        std::cout << "Setting channel" << std::endl;
+        struct nl_msg *mesg = nlmsg_alloc();
+        enum nl80211_commands command = NL80211_CMD_SET_WIPHY;
+        genlmsg_put(mesg, 0, 0, genl_ctrl_resolve(sckt, "nl80211"), 0, 0, command, 0);
+        NLA_PUT_U32(mesg, NL80211_ATTR_IFINDEX, (*it)->ifindex);
+        NLA_PUT_U32(mesg, NL80211_ATTR_WIPHY_FREQ, freqMhz);
+        ret = nl_send_auto_complete(sckt, mesg);
+        nlmsg_free(mesg);
+
+        std::cout << "Setting monitor mode" << std::endl;
+        mesg = nlmsg_alloc();
+        command = NL80211_CMD_SET_INTERFACE;
+        genlmsg_put(mesg, 0, 0, genl_ctrl_resolve(sckt, "nl80211"), 0, 0, command, 0);
+        NLA_PUT_U32(mesg, NL80211_ATTR_IFINDEX, (*it)->ifindex);
+        NLA_PUT_U32(mesg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_MONITOR);
+        ret = nl_send_auto_complete(sckt, mesg);
+        nlmsg_free(mesg);
+
+        sleep(2);
+
         (*it)->thread = std::thread(packetCaptureThreadFn, *it);
+
+        continue;
+
+        nla_put_failure:
+            nlmsg_free(mesg);
+            printf("PUT Failure\n");        
     }
 
     //  Start the packet processing thread

@@ -10,7 +10,7 @@
 #include <sstream>
 
 extern "C" {
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <byteswap.h>
 }
 
@@ -280,10 +280,20 @@ bool Packet::setData(const uint8_t *const buf, const size_t bufLen)
     }
 
     //  Generate a SHA-256 hash over the packet data, considering the offset
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data + radiotapLength, dataLength - radiotapLength - fcsLength);
-    SHA256_Final(hash.hash, &sha256);
+    //SHA256_CTX sha256;
+    //SHA256_Init(&sha256);
+    //SHA256_Update(&sha256, data + radiotapLength, dataLength - radiotapLength - fcsLength);
+    //SHA256_Final(hash.hash, &sha256);
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
+    EVP_DigestUpdate(mdctx, data + radiotapLength, dataLength - radiotapLength - fcsLength);
+    unsigned char *digest = (unsigned char *)OPENSSL_malloc(EVP_MD_size(EVP_sha256()));
+    unsigned int digest_len = 32;
+    EVP_DigestFinal_ex(mdctx, digest, &digest_len);
+    EVP_MD_CTX_free(mdctx);
+
+    memcpy(hash.hash, digest, 32);
 
     return true;
 }
