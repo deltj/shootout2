@@ -6,6 +6,7 @@
 #include <array>
 #include <condition_variable>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -21,10 +22,11 @@ extern "C" {
 #include <unistd.h>
 
 #include <net/if.h>
+#include <libmnl/libmnl.h>
 #include <netlink/netlink.h>
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-#include <linux/nl80211.h>
+//#include <netlink/genl/genl.h>
+//#include <netlink/genl/ctrl.h>
+//#include <linux/nl80211.h>
 }
 
 #include "Packet.h"
@@ -221,13 +223,97 @@ int main(int argc, char *argv[])
     for(std::vector<std::shared_ptr<NL80211Interface> >::iterator it = interfaces.begin();
             it != interfaces.end(); ++it)
     {
-        int freqMhz = 2412;
-        
-        struct nl_sock *sckt = nl_socket_alloc();
-        genl_connect(sckt);
+        //struct nl_sock *nlroute_sock = nl_socket_alloc();
+
+        //nl_connect(nlroute_sock, NETLINK_ROUTE);
+
+        struct mnl_socket *nl = NULL;
+        nl = mnl_socket_open(NETLINK_ROUTE);
         
         std::cout << "Configuring " << (*it)->name << " (ifindex " << (*it)->ifindex << ")" << std::endl;
 
+        unsigned int change = 0;
+        unsigned int flags = 0;
+        change |= IFF_UP;
+        flags &= ~IFF_UP;
+
+        uint8_t buf[MNL_SOCKET_BUFFER_SIZE];
+        struct nlmsghdr *hdr = mnl_nlmsg_put_header(buf);
+        struct ifinfomsg *ifinfo = (struct ifinfomsg *)mnl_nlmsg_put_extra_header(hdr, sizeof(struct ifinfomsg));
+        hdr->nlmsg_type = RTM_NEWLINK;
+        hdr->nlmsg_pid = getpid();
+        hdr->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+        ifinfo->ifi_family = AF_UNSPEC;
+        ifinfo->ifi_index = (*it)->ifindex;
+        ifinfo->ifi_change = change;
+	    ifinfo->ifi_flags = flags;
+
+        for(int i=0; i<32; i++)
+        {
+            std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned int)(buf[i] && 0xff);
+            if((i + 1) % 4 == 0) std::cout << std::endl;
+        }
+
+        ret = mnl_socket_sendto(nl, hdr, hdr->nlmsg_len);
+        std::cout << "ret=" << ret << std::endl;
+
+        sleep(1);
+        mnl_socket_close(nl);
+
+        exit(0);
+
+        //unsigned int change = 0;
+        //unsigned int flags = 0;
+        //change |= IFF_UP;
+        //flags &= ~IFF_UP;
+
+        /*struct ifinfomsg ifinfo;
+        ifinfo.ifi_family = AF_UNSPEC;
+        //ifinfo.ifi_index = (*it)->ifindex;
+        ifinfo.ifi_change = change;
+	    ifinfo.ifi_flags = flags;*/
+
+        //struct nl_msg *msg = nlmsg_alloc();
+        //std::cout << std::hex << "msg=" << msg << std::endl;
+        //struct nlmsghdr *hdr = nlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, RTM_NEWLINK, sizeof(struct nlmsghdr), NLM_F_REQUEST);
+        //std::cout << std::hex << "hdr=" << hdr << std::endl;
+        //struct ifinfomsg *ifi = (struct ifinfomsg *)nlmsg_reserve(msg, sizeof(struct ifinfomsg), 4);
+        //ifi->ifi_family = AF_UNSPEC;
+        //ifi->ifi_change = change;
+        //ifi->ifi_flags = flags;
+        //ifi->ifi_index = (*it)->ifindex;
+        
+        //nlmsg_append(msg,  &ifinfo, sizeof(ifinfo), NLMSG_ALIGNTO);
+        //nla_put(msg, IFLA_IFNAME, strlen((*it)->name.c_str()) + 1, (*it)->name.c_str());
+        //if(nla_put_string(msg, IFLA_IFNAME, (*it)->name.c_str()) < 0)
+        //{
+        //    std::cerr << "nla_put_string failed" << std::endl;
+        //}
+
+        //char buf[4096];
+        //memcpy(buf, msg, 16);
+        //for(int i=0; i<16; i++)
+        //{
+            //std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned int)(buf[i] && 0xff);
+            //if((i + 1) % 4 == 0) std::cout << std::endl;
+        //}
+
+        //int nbytes = nl_send_auto(nlroute_sock, msg);
+        //std::cout << "nbytes: " << nbytes << std::endl;
+
+        //sleep(2);
+
+        //nlmsg_free(msg);
+
+        //exit(0);
+
+
+        //struct nl_msg *msg = nlmsg_alloc();
+        //genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, genl_ctrl_resolve(sock, "nl80211"), 0, 0, command, 0);
+        //nlmsg_free(msg);
+
+
+        /*
         std::cout << "Setting channel" << std::endl;
         struct nl_msg *mesg = nlmsg_alloc();
         enum nl80211_commands command = NL80211_CMD_SET_WIPHY;
@@ -245,16 +331,17 @@ int main(int argc, char *argv[])
         NLA_PUT_U32(mesg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_MONITOR);
         ret = nl_send_auto_complete(sckt, mesg);
         nlmsg_free(mesg);
+        */
 
-        sleep(2);
+        
 
         (*it)->thread = std::thread(packetCaptureThreadFn, *it);
 
         continue;
 
-        nla_put_failure:
-            nlmsg_free(mesg);
-            printf("PUT Failure\n");        
+        //nla_put_failure:
+            //nlmsg_free(mesg);
+            //printf("PUT Failure\n");        
     }
 
     //  Start the packet processing thread

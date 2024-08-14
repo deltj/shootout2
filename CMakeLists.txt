@@ -13,6 +13,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(PCAP REQUIRED libpcap)
 pkg_check_modules(NL3 REQUIRED libnl-3.0)
 pkg_check_modules(GENL3 REQUIRED libnl-genl-3.0)
+pkg_check_modules(MNL REQUIRED libmnl)
 pkg_check_modules(OPENSSL REQUIRED openssl)
 pkg_check_modules(NCURSES REQUIRED ncurses)
 
@@ -36,6 +37,7 @@ add_executable(shootout2
 
 target_include_directories(shootout2 PUBLIC
     ${NL3_INCLUDE_DIRS}
+    ${MNL_INCLUDE_DIRS}
     ${KERNELHEADERS_DIR})
 
 target_link_libraries(shootout2
@@ -43,6 +45,7 @@ target_link_libraries(shootout2
     ${PCAP_LIBRARIES}
     ${NL3_LIBRARIES}
     ${GENL3_LIBRARIES}
+    ${MNL_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     ${NCURSES_LIBRARIES}
     )
