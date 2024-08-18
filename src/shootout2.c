@@ -21,7 +21,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#define MAX_INTERFACES 100
+#define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
 #define MAX_IF_NAME_LEN 52
 
 struct wifi_interface {
@@ -55,7 +55,7 @@ void winexit() {
 }
 
 void winupdate() {
-    //  Draw header
+    /* Draw header */
     werase(headwin);
     wattron(headwin, A_REVERSE);
 
@@ -91,7 +91,7 @@ void winupdate() {
     wattroff(headwin, A_REVERSE);
     wrefresh(headwin);
 
-    //  Draw interface table
+    /* Draw interface table */
     werase(ifwin);
     for (int i = 0; i < num_interfaces; i++) {
         struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
@@ -99,7 +99,7 @@ void winupdate() {
         mvwprintw(ifwin, i, 1,  "%d", wi->ifindex);
         mvwprintw(ifwin, i, 5,  "%s", wi->ifname);
         mvwprintw(ifwin, i, 20, "%lu", wi->packet_count);
-        //mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
+        /*mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());*/
     }
 
     mvwprintw(ifwin, LINES - 2, 0, "LINES, COLS = %d, %d", LINES, COLS);
@@ -119,7 +119,7 @@ void sighandler(int signum) {
 }
 
 int handle_message(const struct nlmsghdr* nlh, int len) {
-    //printf("in handle_message\n");
+    /*printf("in handle_message\n");*/
 
     while (mnl_nlmsg_ok(nlh, len)) {
         printf("received nlmsg_type=%d, nlmsg_len=%d\n", nlh->nlmsg_type, nlh->nlmsg_len);
@@ -184,7 +184,7 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
 }
 
 void handle_response(struct mnl_socket* sock) {
-    //printf("in handle_response\n");
+    /*printf("in handle_response\n");*/
 
     int ret;
 
@@ -199,7 +199,7 @@ void handle_response(struct mnl_socket* sock) {
         }
     }
 
-    printf("Done handling response\n");
+    /*printf("Done handling response\n");*/
 }
 
 int get_nl80211_family_id() {
@@ -394,28 +394,6 @@ void* packet_capture_fn(void* arg) {
     return 0;
 }
 
-/*
-void packetCaptureThreadFn(std::shared_ptr<NL80211Interface> ifc)
-{
-    while(!quit)
-    {
-        //  Make a new Packet object for the received packet
-        shootout::Packet p;
-        p.setData(data, hdr->len);
-        p.ifindex = ifc->ifindex;
-
-        //  Lock the packetQueue mutex and push the new Packet
-        {
-            //TODO: add a lock timeout
-            std::lock_guard<std::mutex> lk(packetQueueMutex);
-            packetQueue.push(p);
-        }
-
-        //  Let everyone know there's a new Packet
-        packetQueueCv.notify_all();
-    }
-}*/
-
 int main(int argc, char* argv[]) {
     int retval = EXIT_SUCCESS;
     pthread_t thread_id[MAX_INTERFACES];
@@ -434,7 +412,7 @@ int main(int argc, char* argv[]) {
         goto cleanup_nl_socket_buffer;
     }
 
-    //  Configure program options
+    /* Configure program options */
     struct option long_opts[] = {
         { "interface", required_argument, 0, 'i' },
         { 0, 0, 0, 0 }
@@ -445,7 +423,7 @@ int main(int argc, char* argv[]) {
     while ((opt = getopt_long(argc, argv, optstr, long_opts, &optind)) != -1) {
         switch (opt) {
         case 'i': {
-            //  Check if the interface is real
+            /* Check if the interface is real */
             const int ifindex = if_nametoindex(optarg);
             if (ifindex > 0) {
                 printf("Using interface %s\n", optarg);
@@ -469,7 +447,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    //  Establish netlink socket connections
+    /* Establish netlink socket connections */
     nl_route_socket = mnl_socket_open(NETLINK_ROUTE);
     if (nl_route_socket == NULL) {
         fprintf(stderr, "mnl_socket_open failed");
@@ -496,33 +474,36 @@ int main(int argc, char* argv[]) {
         goto cleanup_nl_genl_socket;
     }
 
+    /* Determine nl80211 genl family id.  Annoyingly, this isn't a fixed value. */
     printf("Querying for nl80211 family id\n");
     if (get_nl80211_family_id() < 0) {
         fprintf(stderr, "get_nl80211_family_id failed\n");
         goto cleanup_nl_genl_socket;
     }
 
-    //  Configure interfaces
+    /* Configure interfaces */
     for (int i = 0; i < num_interfaces; i++) {
         struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
 
         printf("Configuring (%d)%s\n", wi->ifindex, wi->ifname);
 
+        /* TODO: Remember initial interface mode and restore it when we're done */
         printf("Getting info for %s\n", wi->ifname);
         if_info(wi->ifindex);
 
-        //  Bring the interface down
+        /* Bring the interface down */
         printf("Bringing down %s\n", wi->ifname);
         if_down(wi);
 
-        //  Set monitor mode
+        /* Set monitor mode */
         printf("Setting %s to monitor mode\n", wi->ifname);
         set_monitor_mode(wi);
 
+        /* TODO: make channel configurable */
         /*printf("Setting %s to channel\n", wi->ifname);
         set_channel(wi->ifindex, 2412);*/
 
-        //  Bring the interface up
+        /* Bring the interface up */
         printf("Bringing up %s\n", wi->ifname);
         if_up(wi);
 
@@ -530,7 +511,7 @@ int main(int argc, char* argv[]) {
         pthread_create(&thread_id[i], NULL, packet_capture_fn, (void*)wi);
     }
 
-    //  Set up ncurses
+    /* Set up ncurses */
     initscr();
     noecho();
     wininit();
@@ -539,55 +520,13 @@ int main(int argc, char* argv[]) {
     start_time = time(NULL);
 
     while (!quit) {
-        //packetQueueMutex.lock();
-        //printf("Packets waiting to be processed: %lu\n", packetQueue.size());
-        //packetQueueMutex.unlock();
-
-        //allHashesMutex.lock();
-        //size_t totalPackets = allHashes.size();
-        //allHashesMutex.unlock();*/
-
-        //       Test duration: %d hours, %d minutes, %d seconds\n", hours, minutes, seconds
-        //mvprintw(1, 1, "Unique packets observed: %lu\n", totalPackets);
-
-        //  Iterate interfaces under test
-        /*
-        int row = 0;
-        int rowoffset = 0;
-        for(std::vector<std::shared_ptr<NL80211Interface> >::iterator iit = interfaces.begin();
-                iit != interfaces.end(); ++iit)
-        {
-            //  Find missed packets for this interface
-            //  Note: This loop will not scale well...  find a better solution
-            allHashesMutex.lock();
-            for(std::set<shootout::PacketHash>::const_iterator hit = allHashes.begin();
-                    hit != allHashes.end(); ++hit)
-            {
-                if(!interfaceHit((*iit)->ifindex, *hit))
-                {
-                    //  The interface (iit) missed this hash (hit)
-                    missByInterface[(*iit)->ifindex].insert(*hit);
-                }
-            }
-            allHashesMutex.unlock();
-
-            row = 3 + rowoffset++;
-            mvprintw(row, 1,  "%d", (*iit)->ifindex);
-            mvprintw(row, 5,  "%s", (*iit)->name.c_str());
-            mvprintw(row, 20, "%lu", hitByInterface[(*iit)->ifindex].size());
-            mvprintw(row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
-
-
-            printf("Missed packets for %s: %lu (%0.1f)\n", (*iit)->name.c_str(),
-                    missByInterface[(*iit)->ifindex].size(),
-                    missByInterface[(*iit)->ifindex].size() / (double)totalPackets * 100);
-        }*/
-
         winupdate();
 
-        //sleep(1);
-
+        /* This configures the timeout for ncurses getch() */
         timeout(1000);
+
+        /* Read input from the user - doubles as trigger for window resize
+           notification via KEY_RESIZE */
         int c = getch();
         switch (c) {
         case KEY_RESIZE:
