@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.0.0)
 
 project(shootout2)
 
-enable_testing()
+#enable_testing()
 
-set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -g -fprofile-arcs -ftest-coverage")
-#-g -fprofile-arcs -ftest-coverage
+set(CMAKE_C_FLAGS "-Wall -Wextra -g")
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
 find_package(PkgConfig REQUIRED)
+pkg_check_modules(GLIB2 REQUIRED glib-2.0)
 pkg_check_modules(PCAP REQUIRED libpcap)
 pkg_check_modules(NL3 REQUIRED libnl-3.0)
 pkg_check_modules(GENL3 REQUIRED libnl-genl-3.0)
@@ -32,16 +32,18 @@ find_path(
 message("Found kernel headers in ${KERNELHEADERS_DIR}")
 
 add_executable(shootout2
-    src/shootout2.cpp
-    src/Packet.cpp)
+    src/shootout2.c
+    )
 
 target_include_directories(shootout2 PUBLIC
+    ${GLIB2_INCLUDE_DIRS}
     ${NL3_INCLUDE_DIRS}
     ${MNL_INCLUDE_DIRS}
     ${KERNELHEADERS_DIR})
 
 target_link_libraries(shootout2
     pthread
+    ${GLIB2_LIBRARIES}
     ${PCAP_LIBRARIES}
     ${NL3_LIBRARIES}
     ${GENL3_LIBRARIES}
@@ -52,4 +54,4 @@ target_link_libraries(shootout2
 
 #install(TARGETS shootout2)
 
-add_subdirectory(test)
+#add_subdirectory(test)

@@ -1,0 +1,10 @@
+--mode=c
+--indent=spaces=4
+--convert-tabs
+--lineend=linux
+--style=java
+--add-braces
+--pad-oper
+--pad-comma
+--pad-header
+--align-pointer=type
