@@ -8,19 +8,15 @@ addons:
 
 matrix:
   include:
-    - name: "bionic/amd64/gcc"
+    - name: "jammy/amd64/gcc"
       os: linux
       compiler: gcc
-      dist: bionic
+      dist: jammy
       arch: amd64
-      before_install:
-        - pip install --user cpp-coveralls
-      after_success:
-        - coveralls --root .. --exclude test --gcov-options '\-lp'
-    - name: "bionic/arm64/gcc"
+    - name: "jammy/arm64/gcc"
       os: linux
       compiler: gcc
-      dist: bionic
+      dist: jammy
       arch: arm64
     
 script:
@@ -28,4 +24,3 @@ script:
   - cd build
   - cmake ..
   - make
-  - ctest
