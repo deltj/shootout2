@@ -4,7 +4,6 @@ addons:
   apt:
     packages:
       - libpcap-dev
-      - libboost-all-dev
 
 matrix:
   include:
