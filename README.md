@@ -21,12 +21,16 @@ Shootout2 is still in development.  It may kind of work, but it's certainly not 
 
 ### Dependencies
 
+* glib-2.0
 * libpcap
-* boost
+* libnl-3.0
+* libmnl
+* kernel-headers
+* openssl
 * ncurses
 
-On Ubuntu 18.04 LTS:
-`sudo apt install libpcap-dev libboost-all-dev`
+On RHEL/Rocky/Alma 9
+`sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel`
 
 ### Build
 
@@ -35,12 +39,28 @@ mkdir build
 cd build
 cmake ..
 make
-make test
 ```
 
 ### Usage
 
-The program needs to be run as root to capture from live interfaces.  Use -i to 
-specify the interfaces under test.
+The program needs to be run as root to manipulate wifi interfaces and capture from live interfaces.  Use the `-i` argument to specify an interface to test (use this argument multiple times to test many interfaces).
 
-`sudo ./shootout2 -i wlp7s0 -i wlp6s0 -i wlp8s0`
+First, use the `iw` command to list wifi interfaces on your system.  You should see something like the following output:
+
+```$ iw dev
+phy#0
+	Interface wlp0s20f0u3u1
+		ifindex 3
+		wdev 0x1
+		addr ca:20:4c:xx:yy:zz
+		type monitor
+		channel 1 (2412 MHz), width: 20 MHz (no HT), center1: 2412 MHz
+		txpower 14.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+```
+
+In this case, wlp0s20f0u3u1 is the name of one of the interfaces on my system.  After collecting the interface names, you can run shootout like this:
+
+`sudo ./shootout2 -i wlp0s20f0u3u1`
