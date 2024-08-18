@@ -1,4 +1,4 @@
-/*
+/**
  * shootout2 - 802.11 monitor mode performance evaluator
  *
  * Copyright 2024 Ted DeLoggio <deltj@outlook.com>
@@ -6,30 +6,51 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <getopt.h>
-#include <glib.h>
-#include <libmnl/libmnl.h>
 //#include <linux/if.h>
 #include <linux/nl80211.h>
-#include <ncurses.h>
 #include <net/if.h>
 #include <netlink/netlink.h>
 #include <netlink/genl/ctrl.h>
 #include <netlink/genl/genl.h>
-#include <pcap/pcap.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
+
+#include <getopt.h>
+#include <glib.h>
+#include <libmnl/libmnl.h>
+#include <ncurses.h>
+#include <openssl/evp.h>
+#include <pcap/pcap.h>
+
+#include "wifi_crc32.h"
 
 #define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
 #define MAX_IF_NAME_LEN 52
+#define MAX_PACKET_SIZE 5000 /* is this reasonable? */
+#define HASH_SIZE 32
+#define RT_HDR_SIZE 8
 
+/*
+ * Structure containing information about interfaces under test
+ */
 struct wifi_interface {
     char ifname[MAX_IF_NAME_LEN];
     int ifindex;
     int prev_mode;
     unsigned long long packet_count;
 };
+
+/*
+ * Radiotap header structure
+ */
+struct ieee80211_radiotap_header {
+    u_int8_t        it_version;     /* set to 0 */
+    u_int8_t        it_pad;
+    u_int16_t       it_len;         /* entire length */
+    u_int32_t       it_present;     /* fields present */
+} __attribute__((__packed__));
 
 bool quit = false;
 bool waiting_for_nl80211_family_name = false;
@@ -92,6 +113,8 @@ void winupdate() {
     wrefresh(headwin);
 
     /* Draw interface table */
+    /* TODO: indicate the driver being used by each interface */
+    /* TODO: allow sorting by: ifindex, ifname, rx count, ... */
     werase(ifwin);
     for (int i = 0; i < num_interfaces; i++) {
         struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
@@ -367,12 +390,15 @@ void* packet_capture_fn(void* arg) {
         return 0;
     }
 
-    struct pcap_pkthdr* hdr;
+    struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
+    uint8_t local_data[MAX_PACKET_SIZE];
+    uint8_t hash[HASH_SIZE];
 
+    /* TODO: handle case where pcap_next blocks until a 1st packet is received */
     while (!quit) {
         /* Wait for a packet from libpcap */
-        pcap_next_ex(p, &hdr, &data);
+        pcap_next_ex(p, &pcap_hdr, &data);
 
         wi->packet_count++;
 
@@ -384,7 +410,52 @@ void* packet_capture_fn(void* arg) {
            must make a copy of them.
            See: https://www.tcpdump.org/manpages/pcap_next_ex.3pcap.html */
 
+        memcpy(local_data, data, pcap_hdr->len);
 
+        /* Look for radiotap header */
+        size_t rt_len = 0;
+        if (pcap_hdr->len > RT_HDR_SIZE) {
+            const struct ieee80211_radiotap_header* rth = (const struct ieee80211_radiotap_header*)local_data;
+        
+            //  As of April 2020, version is always zero
+            //  see: https://www.radiotap.org/
+            if(rth->it_version == 0 && rth->it_pad == 0) {
+                //  This packet might have a radiotap header that must be skipped
+                //  for hashing
+                rt_len = rth->it_len;
+            }
+        }
+
+        /* There's a weird bug where somehow radiotapLength ends up being the same
+           as dataLength, which causes an integer overflow below.
+           TODO: Diagnose the weird bug */
+        if (rt_len == pcap_hdr->len) {
+            rt_len = 0;
+        }
+
+        /* If the last 4 bytes match an FCS over the frame, not counting the 
+           radiotap header and last 4 bytes, the frame has an FCS present (and we
+           need to ignore it when hashing) */
+        size_t fcs_len = 0;
+        const uint32_t fcs = calcfcs(data + rt_len, pcap_hdr->len - rt_len - 4);
+        if (data[pcap_hdr->len - 4] == (uint8_t)(fcs >> 24) &&
+            data[pcap_hdr->len - 3] == (uint8_t)(fcs >> 16) &&
+            data[pcap_hdr->len - 2] == (uint8_t)(fcs >> 8) &&
+            data[pcap_hdr->len - 1] == (uint8_t)(fcs)) {
+            /* Found an FCS */
+            fcs_len = 4;
+        }
+
+        /* Generate a SHA-256 hash over the packet data, considering the offset */
+        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+        EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
+        EVP_DigestUpdate(mdctx, data + rt_len, pcap_hdr->len - rt_len - fcs_len);
+        unsigned char *digest = (unsigned char *)OPENSSL_malloc(EVP_MD_size(EVP_sha256()));
+        unsigned int digest_len = 32;
+        EVP_DigestFinal_ex(mdctx, digest, &digest_len);
+        EVP_MD_CTX_free(mdctx);
+
+        /* TODO: compare packet hashes across capture threads to identify missing packets */
     }
 
     pcap_close(p);

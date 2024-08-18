@@ -29,7 +29,8 @@ Shootout2 is still in development.  It may kind of work, but it's certainly not 
 * openssl
 * ncurses
 
-On RHEL/Rocky/Alma 9
+On RHEL/Rocky/Alma 9:
+
 `sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel`
 
 ### Build
@@ -47,7 +48,8 @@ The program needs to be run as root to manipulate wifi interfaces and capture fr
 
 First, use the `iw` command to list wifi interfaces on your system.  You should see something like the following output:
 
-```$ iw dev
+```
+$ iw dev
 phy#0
 	Interface wlp0s20f0u3u1
 		ifindex 3
