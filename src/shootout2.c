@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include <time.h>
 
 #include <getopt.h>
@@ -24,11 +25,10 @@
 #include <openssl/evp.h>
 #include <pcap/pcap.h>
 
-#include "wifi_crc32.h"
+#include "wifi.h"
 
 #define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
 #define MAX_IF_NAME_LEN 52
-#define MAX_PACKET_SIZE 5000 /* is this reasonable? */
 #define HASH_SIZE 32
 #define RT_HDR_SIZE 8
 
@@ -39,6 +39,7 @@ struct wifi_interface {
     char ifname[MAX_IF_NAME_LEN];
     int ifindex;
     int prev_mode;
+    char reg_dom[3];
     unsigned long long packet_count;
 };
 
@@ -54,6 +55,7 @@ struct ieee80211_radiotap_header {
 
 bool quit = false;
 bool waiting_for_nl80211_family_name = false;
+bool waiting_for_info = false;
 GPtrArray* interfaces = NULL;
 int num_interfaces = 0;
 struct mnl_socket* nl_route_socket = NULL;
@@ -121,7 +123,7 @@ void winupdate() {
 
         mvwprintw(ifwin, i, 1,  "%d", wi->ifindex);
         mvwprintw(ifwin, i, 5,  "%s", wi->ifname);
-        mvwprintw(ifwin, i, 20, "%lu", wi->packet_count);
+        mvwprintw(ifwin, i, 25, "%lu", wi->packet_count);
         /*mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());*/
     }
 
@@ -143,6 +145,9 @@ void sighandler(int signum) {
 
 int handle_message(const struct nlmsghdr* nlh, int len) {
     /*printf("in handle_message\n");*/
+    const char* tmp_str;
+    uint8_t* tmp_data;
+    uint32_t tmp_u32;
 
     while (mnl_nlmsg_ok(nlh, len)) {
         printf("received nlmsg_type=%d, nlmsg_len=%d\n", nlh->nlmsg_type, nlh->nlmsg_len);
@@ -157,7 +162,8 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
             if (!error->error) {
                 printf("Received genl ACK\n");
             } else {
-                printf("Received genl error\n");
+                fprintf(stderr, "Received genl Error\n");
+                mnl_nlmsg_fprintf(stderr, (void *)nlh, nlh->nlmsg_len, 0);
             }
             seq += 1;
             return MNL_CB_STOP;
@@ -186,6 +192,38 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
                             waiting_for_nl80211_family_name = false;
                             printf("nl80211_family_id=%d\n", nl80211_family_id);
                         }
+                        break;
+
+                    default:
+                        break;
+                    }
+                }
+            }
+        }
+        break;
+        
+        case 35: {
+            const struct genlmsghdr* genlh = (const struct genlmsghdr*)mnl_nlmsg_get_payload(nlh);
+            printf("35 cmd=%u, version=%u\n", genlh->cmd, genlh->version);
+
+            if (genlh->cmd == 3 && waiting_for_info) {
+                mnl_nlmsg_fprintf(stderr, (void *)nlh, len, sizeof(struct genlmsghdr));
+
+                waiting_for_info = false;
+                struct nlattr* attr;
+                mnl_attr_for_each(attr, nlh, sizeof(*genlh)) {
+                    printf("Attribute type = %u\n", mnl_attr_get_type(attr));
+
+                    switch (mnl_attr_get_type(attr)) {
+
+                    case NL80211_ATTR_WIPHY:
+                        tmp_u32 = mnl_attr_get_u32(attr);
+                        printf("WIPHY = %u\n", tmp_u32);
+                        break;
+
+                    case NL80211_ATTR_WIPHY_NAME:
+                        tmp_str = mnl_attr_get_str(attr);
+                        printf("WIPHY_NAME = %s\n", tmp_str);
                         break;
 
                     default:
@@ -329,6 +367,32 @@ int if_up(struct wifi_interface* wi) {
     return 0;
 }
 
+int get_wiphy(struct wifi_interface* wi) {
+    struct nlmsghdr* nlh = mnl_nlmsg_put_header(nl_socket_buffer);
+    struct genlmsghdr* genlh = (struct genlmsghdr*)mnl_nlmsg_put_extra_header(nlh, sizeof(struct genlmsghdr));
+    unsigned int portid = mnl_socket_get_portid(nl_genl_socket);
+
+    nlh->nlmsg_type = nl80211_family_id;
+    nlh->nlmsg_pid = portid;
+    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+    nlh->nlmsg_seq = seq;
+    genlh->cmd = NL80211_CMD_GET_WIPHY;
+    genlh->version = 2;
+    mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, wi->ifindex);
+
+    /*mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));*/
+
+    if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
+        fprintf(stderr, "mnl_socket_sendto failed");
+        return -1;
+    }
+
+    waiting_for_info = true;
+    handle_response(nl_genl_socket);
+
+    return 0;
+}
+
 int set_monitor_mode(struct wifi_interface* wi) {
     struct nlmsghdr* nlh = mnl_nlmsg_put_header(nl_socket_buffer);
     struct genlmsghdr* genlh = (struct genlmsghdr*)mnl_nlmsg_put_extra_header(nlh, sizeof(struct genlmsghdr));
@@ -343,7 +407,7 @@ int set_monitor_mode(struct wifi_interface* wi) {
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, wi->ifindex);
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_MONITOR);
 
-    mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));
+    /*mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));*/
 
     if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
         fprintf(stderr, "mnl_socket_sendto failed");
@@ -355,7 +419,7 @@ int set_monitor_mode(struct wifi_interface* wi) {
     return 0;
 }
 
-int set_channel(const int ifindex, const unsigned int freq) {
+int set_channel(const int ifindex, const uint32_t freq) {
     struct nlmsghdr* nlh = mnl_nlmsg_put_header(nl_socket_buffer);
     struct genlmsghdr* genlh = (struct genlmsghdr*)mnl_nlmsg_put_extra_header(nlh, sizeof(struct genlmsghdr));
     unsigned int portid = mnl_socket_get_portid(nl_genl_socket);
@@ -365,9 +429,12 @@ int set_channel(const int ifindex, const unsigned int freq) {
     nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
     nlh->nlmsg_seq = seq;
     genlh->cmd = NL80211_CMD_SET_CHANNEL;
-    genlh->version = 0;
+    genlh->version = 2;
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, ifindex);
     mnl_attr_put_u32(nlh, NL80211_ATTR_WIPHY_FREQ, freq);
+    mnl_attr_put_u32(nlh, NL80211_ATTR_WIPHY_CHANNEL_TYPE, NL80211_CHAN_NO_HT);
+
+    mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));
 
     if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
         fprintf(stderr, "mnl_socket_sendto failed");
@@ -392,7 +459,6 @@ void* packet_capture_fn(void* arg) {
 
     struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
-    uint8_t local_data[MAX_PACKET_SIZE];
     uint8_t hash[HASH_SIZE];
 
     /* TODO: handle case where pcap_next blocks until a 1st packet is received */
@@ -410,12 +476,10 @@ void* packet_capture_fn(void* arg) {
            must make a copy of them.
            See: https://www.tcpdump.org/manpages/pcap_next_ex.3pcap.html */
 
-        memcpy(local_data, data, pcap_hdr->len);
-
         /* Look for radiotap header */
         size_t rt_len = 0;
         if (pcap_hdr->len > RT_HDR_SIZE) {
-            const struct ieee80211_radiotap_header* rth = (const struct ieee80211_radiotap_header*)local_data;
+            const struct ieee80211_radiotap_header* rth = (const struct ieee80211_radiotap_header*)data;
         
             //  As of April 2020, version is always zero
             //  see: https://www.radiotap.org/
@@ -426,8 +490,8 @@ void* packet_capture_fn(void* arg) {
             }
         }
 
-        /* There's a weird bug where somehow radiotapLength ends up being the same
-           as dataLength, which causes an integer overflow below.
+        /* There's a weird bug where somehow rt_len ends up being the same
+           as pcap_hdr->len, which causes an integer overflow below.
            TODO: Diagnose the weird bug */
         if (rt_len == pcap_hdr->len) {
             rt_len = 0;
@@ -484,15 +548,31 @@ int main(int argc, char* argv[]) {
     }
 
     /* Configure program options */
+    /* TODO: add support for HT channels */
     struct option long_opts[] = {
+        { "channel", required_argument, 0, 'c' },
         { "interface", required_argument, 0, 'i' },
         { 0, 0, 0, 0 }
     };
 
-    const char* optstr = "i:";
+    const char* optstr = "c:i:";
+    uint32_t channel = 1;
     int opt;
     while ((opt = getopt_long(argc, argv, optstr, long_opts, &optind)) != -1) {
         switch (opt) {
+        case 'c': {
+            char* end;
+            channel = strtoul(optarg, &end, 10);
+            if (valid_channel(channel)) {
+                printf("Using channel %u\n", channel);
+            } else {
+                fprintf(stderr, "Invalid or unsupported channel: %s\n", optarg);
+                retval = EXIT_FAILURE;
+                goto cleanup_interfaces;
+            }
+        }
+        break;
+
         case 'i': {
             /* Check if the interface is real */
             const int ifindex = if_nametoindex(optarg);
@@ -560,7 +640,7 @@ int main(int argc, char* argv[]) {
 
         /* TODO: Remember initial interface mode and restore it when we're done */
         printf("Getting info for %s\n", wi->ifname);
-        if_info(wi->ifindex);
+        get_wiphy(wi);
 
         /* Bring the interface down */
         printf("Bringing down %s\n", wi->ifname);
@@ -570,13 +650,13 @@ int main(int argc, char* argv[]) {
         printf("Setting %s to monitor mode\n", wi->ifname);
         set_monitor_mode(wi);
 
-        /* TODO: make channel configurable */
-        /*printf("Setting %s to channel\n", wi->ifname);
-        set_channel(wi->ifindex, 2412);*/
-
         /* Bring the interface up */
         printf("Bringing up %s\n", wi->ifname);
         if_up(wi);
+
+        /* Set channel */
+        printf("Setting %s to channel %u\n", wi->ifname, channel);
+        set_channel(wi->ifindex, channel_to_freq(channel));
 
         /* Start capture thread */
         pthread_create(&thread_id[i], NULL, packet_capture_fn, (void*)wi);

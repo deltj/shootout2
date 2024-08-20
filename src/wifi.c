@@ -5,7 +5,8 @@
  */
 #include <byteswap.h>
 #include <stddef.h>
-#include <stdint.h>
+
+#include "wifi.h"
 
 const uint32_t crc32_ccitt_table[256] = {
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419,
@@ -80,4 +81,21 @@ uint32_t calcfcs(const uint8_t *const buf, const size_t buf_len) {
     }
 
     return ~crc32;
+}
+
+bool valid_channel(const uint32_t channel) {
+    if (channel > 0 && channel <= 14) {
+        return true;
+    } else {
+        return false;
+    }
+}
+uint32_t channel_to_freq(const uint32_t channel) {
+    if (channel > 0 && channel <= 13) {
+        return 2412 + (channel - 1) * 5;
+    } else if (channel == 14) {
+        return 2484;
+    } else {
+        return 0;
+    }
 }

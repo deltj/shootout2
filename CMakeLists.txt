@@ -32,7 +32,7 @@ find_path(
 message("Found kernel headers in ${KERNELHEADERS_DIR}")
 
 add_executable(shootout2
-    src/wifi_crc32.c
+    src/wifi.c
     src/shootout2.c
     )
 
