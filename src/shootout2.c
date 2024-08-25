@@ -29,6 +29,7 @@
 
 #define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
 #define MAX_IF_NAME_LEN 52
+#define MAX_WIPHY_NAME_LEN 40
 #define HASH_SIZE 32
 #define RT_HDR_SIZE 8
 
@@ -38,6 +39,9 @@
 struct wifi_interface {
     char ifname[MAX_IF_NAME_LEN];
     int ifindex;
+    uint32_t wiphy;
+    char wiphy_name[MAX_WIPHY_NAME_LEN];
+
     int prev_mode;
     char reg_dom[3];
     unsigned long long packet_count;
@@ -55,7 +59,8 @@ struct ieee80211_radiotap_header {
 
 bool quit = false;
 bool waiting_for_nl80211_family_name = false;
-bool waiting_for_info = false;
+bool waiting_for_nl80211_phy = false;
+bool waiting_for_nl80211_interface = false;
 GPtrArray* interfaces = NULL;
 int num_interfaces = 0;
 struct mnl_socket* nl_route_socket = NULL;
@@ -66,6 +71,8 @@ unsigned int seq = 1;
 WINDOW* headwin = NULL;
 WINDOW* ifwin = NULL;
 time_t start_time;
+uint32_t tmp_wiphy;
+char tmp_wiphy_name[MAX_WIPHY_NAME_LEN];
 
 void wininit() {
     headwin = newwin(2, COLS, 0, 0);
@@ -123,7 +130,9 @@ void winupdate() {
 
         mvwprintw(ifwin, i, 1,  "%d", wi->ifindex);
         mvwprintw(ifwin, i, 5,  "%s", wi->ifname);
-        mvwprintw(ifwin, i, 25, "%lu", wi->packet_count);
+        mvwprintw(ifwin, i, 25, "%u", wi->wiphy);
+        mvwprintw(ifwin, i, 30, "%s", wi->wiphy_name);
+        mvwprintw(ifwin, i, 45, "%lu", wi->packet_count);
         /*mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());*/
     }
 
@@ -206,24 +215,60 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
             const struct genlmsghdr* genlh = (const struct genlmsghdr*)mnl_nlmsg_get_payload(nlh);
             printf("35 cmd=%u, version=%u\n", genlh->cmd, genlh->version);
 
-            if (genlh->cmd == 3 && waiting_for_info) {
+            if (genlh->cmd == 3 && waiting_for_nl80211_phy) {
                 mnl_nlmsg_fprintf(stderr, (void *)nlh, len, sizeof(struct genlmsghdr));
 
-                waiting_for_info = false;
+                waiting_for_nl80211_phy = false;
                 struct nlattr* attr;
                 mnl_attr_for_each(attr, nlh, sizeof(*genlh)) {
-                    printf("Attribute type = %u\n", mnl_attr_get_type(attr));
+                    const uint16_t attr_type = mnl_attr_get_type(attr);
+                    printf("Attribute type = %u (%s)\n", attr_type, attrnames[attr_type]);
 
-                    switch (mnl_attr_get_type(attr)) {
+                    switch (attr_type) {
 
                     case NL80211_ATTR_WIPHY:
-                        tmp_u32 = mnl_attr_get_u32(attr);
-                        printf("WIPHY = %u\n", tmp_u32);
+                        tmp_wiphy = mnl_attr_get_u32(attr);
+                        printf("WIPHY = %u\n", tmp_wiphy);
                         break;
 
                     case NL80211_ATTR_WIPHY_NAME:
                         tmp_str = mnl_attr_get_str(attr);
+                        memset(tmp_wiphy_name, 0, MAX_WIPHY_NAME_LEN);
+                        strncpy(tmp_wiphy_name, tmp_str, MAX_WIPHY_NAME_LEN);
                         printf("WIPHY_NAME = %s\n", tmp_str);
+                        break;
+                    
+                    case NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX:
+                        break;
+
+                    default:
+                        break;
+                    }
+                }
+            } else if (genlh->cmd == 7 && waiting_for_nl80211_interface) {
+                mnl_nlmsg_fprintf(stderr, (void *)nlh, len, sizeof(struct genlmsghdr));
+
+                waiting_for_nl80211_interface = false;
+                struct nlattr* attr;
+                mnl_attr_for_each(attr, nlh, sizeof(*genlh)) {
+                    const uint16_t attr_type = mnl_attr_get_type(attr);
+                    printf("Attribute type = %u (%s)\n", attr_type, attrnames[attr_type]);
+
+                    switch (attr_type) {
+
+                    case NL80211_ATTR_WIPHY:
+                        tmp_wiphy = mnl_attr_get_u32(attr);
+                        printf("WIPHY = %u\n", tmp_wiphy);
+                        break;
+
+                    case NL80211_ATTR_WIPHY_NAME:
+                        tmp_str = mnl_attr_get_str(attr);
+                        memset(tmp_wiphy_name, 0, MAX_WIPHY_NAME_LEN);
+                        strncpy(tmp_wiphy_name, tmp_str, MAX_WIPHY_NAME_LEN);
+                        printf("WIPHY_NAME = %s\n", tmp_str);
+                        break;
+                    
+                    case NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX:
                         break;
 
                     default:
@@ -387,8 +432,42 @@ int get_wiphy(struct wifi_interface* wi) {
         return -1;
     }
 
-    waiting_for_info = true;
+    waiting_for_nl80211_phy = true;
     handle_response(nl_genl_socket);
+
+    wi->wiphy = tmp_wiphy;
+    memset(wi->wiphy_name, 0, MAX_WIPHY_NAME_LEN);
+    strncpy(wi->wiphy_name, tmp_wiphy_name, MAX_WIPHY_NAME_LEN);
+
+    return 0;
+}
+
+int get_interface(struct wifi_interface* wi) {
+    struct nlmsghdr* nlh = mnl_nlmsg_put_header(nl_socket_buffer);
+    struct genlmsghdr* genlh = (struct genlmsghdr*)mnl_nlmsg_put_extra_header(nlh, sizeof(struct genlmsghdr));
+    unsigned int portid = mnl_socket_get_portid(nl_genl_socket);
+
+    nlh->nlmsg_type = nl80211_family_id;
+    nlh->nlmsg_pid = portid;
+    nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+    nlh->nlmsg_seq = seq;
+    genlh->cmd = NL80211_CMD_GET_INTERFACE;
+    genlh->version = 2;
+    mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, wi->ifindex);
+
+    /*mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));*/
+
+    if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
+        fprintf(stderr, "mnl_socket_sendto failed");
+        return -1;
+    }
+
+    waiting_for_nl80211_interface = true;
+    handle_response(nl_genl_socket);
+
+    /*wi->wiphy = tmp_wiphy;
+    memset(wi->wiphy_name, 0, MAX_WIPHY_NAME_LEN);
+    strncpy(wi->wiphy_name, tmp_wiphy_name, MAX_WIPHY_NAME_LEN);*/
 
     return 0;
 }
@@ -641,6 +720,7 @@ int main(int argc, char* argv[]) {
         /* TODO: Remember initial interface mode and restore it when we're done */
         printf("Getting info for %s\n", wi->ifname);
         get_wiphy(wi);
+        get_interface(wi);
 
         /* Bring the interface down */
         printf("Bringing down %s\n", wi->ifname);

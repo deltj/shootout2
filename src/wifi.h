@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+extern const char * attrnames[];
+
 /**
  * Calculate the CCITT CRC32 frame check sequence (FCS) for an IEEE 802.11 
  * frame.
