@@ -7,6 +7,46 @@
 
 #include "wifi.h"
 
+/* supported channels (not necessarily complete) */
+const uint32_t valid_channels[] = {
+	1,
+	2,
+	3,
+	4,
+	5,
+	6,
+	7,
+	8,
+	9,
+	10,
+	11,
+	12,
+	13,
+	32,
+	36,
+	40,
+	44,
+	48,
+	52,
+	56,
+	60,
+	64,
+	68,
+	96,
+	100,
+	104,
+	108,
+	112,
+	116,
+	120,
+	124,
+	128,
+	132,
+	136,
+	140,
+	144
+};
+
 const char * attrnames[] = {
 	"NL80211_ATTR_UNSPEC",
 	"NL80211_ATTR_WIPHY",
@@ -339,12 +379,17 @@ const char * attrnames[] = {
 };
 
 bool valid_channel(const uint32_t channel) {
-    if (channel > 0 && channel <= 14) {
-        return true;
-    } else {
-        return false;
-    }
+
+	const int num_channels = sizeof(valid_channels) / sizeof(valid_channels[0]);
+	for (int i = 0; i < num_channels; i++) {
+		if (channel == valid_channels[i]) {
+			return true;
+		}
+	}
+
+	return false;
 }
+
 uint32_t channel_to_freq(const uint32_t channel) {
     if (channel > 0 && channel <= 13) {
         return 2412 + (channel - 1) * 5;

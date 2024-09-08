@@ -156,8 +156,6 @@ void sighandler(int signum) {
 int handle_message(const struct nlmsghdr* nlh, int len) {
     /*printf("in handle_message\n");*/
     const char* tmp_str;
-    //uint8_t* tmp_data;
-    //uint32_t tmp_u32;
 
     while (mnl_nlmsg_ok(nlh, len)) {
         printf("received nlmsg_type=%d, nlmsg_len=%d\n", nlh->nlmsg_type, nlh->nlmsg_len);
