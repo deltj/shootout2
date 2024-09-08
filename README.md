@@ -28,6 +28,7 @@ Shootout2 is still in development.  It may kind of work, but it's certainly not 
 * kernel-headers
 * openssl
 * ncurses
+* check
 
 Ubuntu/Kali:
 
@@ -35,7 +36,7 @@ Ubuntu/Kali:
 
 RHEL/Rocky/Alma:
 
-`sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel`
+`sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel check check-devel`
 
 ### Build
 
