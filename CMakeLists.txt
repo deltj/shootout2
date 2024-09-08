@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.0)
 
 project(shootout2)
 
-#enable_testing()
+enable_testing()
 
 set(CMAKE_C_FLAGS "-Wall -Wextra -g")
 
@@ -12,10 +12,10 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB2 REQUIRED glib-2.0)
 pkg_check_modules(PCAP REQUIRED libpcap)
 pkg_check_modules(NL3 REQUIRED libnl-3.0)
-#pkg_check_modules(GENL3 REQUIRED libnl-genl-3.0)
 pkg_check_modules(MNL REQUIRED libmnl)
 pkg_check_modules(OPENSSL REQUIRED openssl)
 pkg_check_modules(NCURSES REQUIRED ncurses)
+pkg_check_modules(CHECK REQUIRED check)
 
 execute_process(
     COMMAND uname -r
@@ -31,28 +31,33 @@ find_path(
 )
 message("Found kernel headers in ${KERNELHEADERS_DIR}")
 
-add_executable(shootout2
+add_library(libshootout
+    src/crc.c
     src/wifi.c
+    )
+set_target_properties(libshootout PROPERTIES PREFIX "")
+
+add_executable(shootout
     src/shootout2.c
     )
 
-target_include_directories(shootout2 PUBLIC
+target_include_directories(shootout PUBLIC
     ${GLIB2_INCLUDE_DIRS}
     ${NL3_INCLUDE_DIRS}
     ${MNL_INCLUDE_DIRS}
     ${KERNELHEADERS_DIR})
 
-target_link_libraries(shootout2
+target_link_libraries(shootout
     pthread
     ${GLIB2_LIBRARIES}
     ${PCAP_LIBRARIES}
     ${NL3_LIBRARIES}
-#    ${GENL3_LIBRARIES}
     ${MNL_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     ${NCURSES_LIBRARIES}
+    libshootout
     )
 
-#install(TARGETS shootout2)
+#install(TARGETS shootout)
 
-#add_subdirectory(test)
+add_subdirectory(test)

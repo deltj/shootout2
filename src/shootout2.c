@@ -25,6 +25,7 @@
 #include <openssl/evp.h>
 #include <pcap/pcap.h>
 
+#include "crc.h"
 #include "wifi.h"
 
 #define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
@@ -155,8 +156,8 @@ void sighandler(int signum) {
 int handle_message(const struct nlmsghdr* nlh, int len) {
     /*printf("in handle_message\n");*/
     const char* tmp_str;
-    uint8_t* tmp_data;
-    uint32_t tmp_u32;
+    //uint8_t* tmp_data;
+    //uint32_t tmp_u32;
 
     while (mnl_nlmsg_ok(nlh, len)) {
         printf("received nlmsg_type=%d, nlmsg_len=%d\n", nlh->nlmsg_type, nlh->nlmsg_len);
@@ -538,7 +539,7 @@ void* packet_capture_fn(void* arg) {
 
     struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
-    uint8_t hash[HASH_SIZE];
+    //uint8_t hash[HASH_SIZE];
 
     /* TODO: handle case where pcap_next blocks until a 1st packet is received */
     while (!quit) {
