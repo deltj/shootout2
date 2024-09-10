@@ -27,6 +27,7 @@
 
 #include "crc.h"
 #include "wifi.h"
+#include "hash_table.h"
 
 #define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
 #define MAX_IF_NAME_LEN 52
@@ -537,7 +538,10 @@ void* packet_capture_fn(void* arg) {
 
     struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
-    //uint8_t hash[HASH_SIZE];
+    /*uint8_t hash[HASH_SIZE];*/
+
+    hash_table_t *ht = NULL;
+    ht = ht_alloc(1024);
 
     /* TODO: handle case where pcap_next blocks until a 1st packet is received */
     while (!quit) {
@@ -579,7 +583,7 @@ void* packet_capture_fn(void* arg) {
            radiotap header and last 4 bytes, the frame has an FCS present (and we
            need to ignore it when hashing) */
         size_t fcs_len = 0;
-        const uint32_t fcs = calcfcs(data + rt_len, pcap_hdr->len - rt_len - 4);
+        const uint32_t fcs = calc_crc(data + rt_len, pcap_hdr->len - rt_len - 4);
         if (data[pcap_hdr->len - 4] == (uint8_t)(fcs >> 24) &&
             data[pcap_hdr->len - 3] == (uint8_t)(fcs >> 16) &&
             data[pcap_hdr->len - 2] == (uint8_t)(fcs >> 8) &&
@@ -598,7 +602,11 @@ void* packet_capture_fn(void* arg) {
         EVP_MD_CTX_free(mdctx);
 
         /* TODO: compare packet hashes across capture threads to identify missing packets */
+        //time_t now = time(NULL);
+        //ht_update(ht, digest, now);
     }
+
+    ht_free(ht);
 
     pcap_close(p);
 
@@ -610,6 +618,7 @@ void* packet_capture_fn(void* arg) {
 int main(int argc, char* argv[]) {
     int retval = EXIT_SUCCESS;
     pthread_t thread_id[MAX_INTERFACES];
+    bool log_mode = false;
 
     nl_socket_buffer = malloc(MNL_SOCKET_BUFFER_SIZE);
     if (nl_socket_buffer == NULL) {
@@ -630,10 +639,11 @@ int main(int argc, char* argv[]) {
     struct option long_opts[] = {
         { "channel", required_argument, 0, 'c' },
         { "interface", required_argument, 0, 'i' },
+        { "log", no_argument, 0, 'l'},
         { 0, 0, 0, 0 }
     };
 
-    const char* optstr = "c:i:";
+    const char* optstr = "c:i:l";
     uint32_t channel = 1;
     int opt;
     while ((opt = getopt_long(argc, argv, optstr, long_opts, &optind)) != -1) {
@@ -669,6 +679,11 @@ int main(int argc, char* argv[]) {
             }
         }
         break;
+
+        case 'l':
+            log_mode = true;
+            printf("Using log mode - no curses UI will be displayed\n");
+            break;
 
         default:
             fprintf(stderr, "Unrecognized argument %c\n", opt);
@@ -742,31 +757,37 @@ int main(int argc, char* argv[]) {
     }
 
     /* Set up ncurses */
-    initscr();
-    noecho();
-    wininit();
+    if (!log_mode) {
+        initscr();
+        noecho();
+        wininit();
+    }
 
     /* Remember start time */
     start_time = time(NULL);
 
     while (!quit) {
-        winupdate();
+        if (!log_mode) {
+            winupdate();
 
-        /* This configures the timeout for ncurses getch() */
-        timeout(1000);
+            /* This configures the timeout for ncurses getch() */
+            timeout(1000);
 
-        /* Read input from the user - doubles as trigger for window resize
-           notification via KEY_RESIZE */
-        int c = getch();
-        switch (c) {
-        case KEY_RESIZE:
-            winexit();
-            wininit();
-            break;
+            /* Read input from the user - doubles as trigger for window resize
+            notification via KEY_RESIZE */
+            int c = getch();
+            switch (c) {
+            case KEY_RESIZE:
+                winexit();
+                wininit();
+                break;
 
-        case 'q':
-            quit = true;
-            break;
+            case 'q':
+                quit = true;
+                break;
+            }
+        } else {
+            sleep(1);
         }
     }
 

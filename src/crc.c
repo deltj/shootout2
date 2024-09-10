@@ -73,7 +73,7 @@ const uint32_t crc32_table[256] = {
  * Note: This function is adapted from the Wireshark source, as described here:
  * https://gist.github.com/glennzw/6365693
  */
-uint32_t calcfcs(const uint8_t *const buf, const size_t buf_len) {
+uint32_t calc_crc(const uint8_t *const buf, const size_t buf_len) {
     uint32_t crc32 = 0xffffffff;
 
     if(buf != NULL && buf_len > 0) {
@@ -82,7 +82,7 @@ uint32_t calcfcs(const uint8_t *const buf, const size_t buf_len) {
         }
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        crc32 = __bswap_32(crc32);
+        //crc32 = __bswap_32(crc32);
 #endif
     }
 

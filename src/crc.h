@@ -17,6 +17,6 @@
  * @param bufLen The length of buf
  * @returns the FCS
  */
-uint32_t calcfcs(const uint8_t *const buf, const size_t buf_len);
+uint32_t calc_crc(const uint8_t *const buf, const size_t buf_len);
 
 #endif

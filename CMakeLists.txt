@@ -34,6 +34,7 @@ message("Found kernel headers in ${KERNELHEADERS_DIR}")
 add_library(libshootout
     src/crc.c
     src/wifi.c
+    src/hash_table.c
     )
 set_target_properties(libshootout PROPERTIES PREFIX "")
 
