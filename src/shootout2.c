@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//#include <linux/if.h>
 #include <linux/nl80211.h>
 #include <net/if.h>
 #include <netlink/netlink.h>
@@ -29,7 +28,7 @@
 #include "wifi.h"
 #include "hash_table.h"
 
-#define MAX_INTERFACES 100 /* Do I think anyone will try to test more than 100 interfaces? */
+#define MAX_INTERFACES 100  //  Do I think anyone will try to test more than 100 interfaces?
 #define MAX_IF_NAME_LEN 52
 #define MAX_WIPHY_NAME_LEN 40
 #define HASH_SIZE 32
@@ -43,6 +42,7 @@ struct wifi_interface {
     int ifindex;
     uint32_t wiphy;
     char wiphy_name[MAX_WIPHY_NAME_LEN];
+    int ai; //  Array index for hash tables and mutexes
 
     int prev_mode;
     char reg_dom[3];
@@ -53,10 +53,10 @@ struct wifi_interface {
  * Radiotap header structure
  */
 struct ieee80211_radiotap_header {
-    u_int8_t        it_version;     /* set to 0 */
+    u_int8_t        it_version;     // set to 0
     u_int8_t        it_pad;
-    u_int16_t       it_len;         /* entire length */
-    u_int32_t       it_present;     /* fields present */
+    u_int16_t       it_len;         // entire length
+    u_int32_t       it_present;     // fields present
 } __attribute__((__packed__));
 
 bool quit = false;
@@ -75,6 +75,10 @@ WINDOW* ifwin = NULL;
 time_t start_time;
 uint32_t tmp_wiphy;
 char tmp_wiphy_name[MAX_WIPHY_NAME_LEN];
+hash_table_t *all_packets;
+pthread_mutex_t all_packets_mutex;
+hash_table_t *interface_packets[MAX_INTERFACES];
+pthread_mutex_t interface_packets_mutex[MAX_INTERFACES];
 
 void wininit() {
     headwin = newwin(2, COLS, 0, 0);
@@ -87,18 +91,16 @@ void winexit() {
 }
 
 void winupdate() {
-    /* Draw header */
+    //  Draw header
     werase(headwin);
     wattron(headwin, A_REVERSE);
 
     time_t curr_time = time(NULL);
     struct tm* tt = localtime(&curr_time);
 
-    /*
-       This should end up being 19 characters wide, but gcc emites a
-       format-truncation warning if the destination buffer is smaller
-       than 69 bytes
-    */
+    //  This should end up being 19 characters wide, but gcc emites a
+    //  format-truncation warning if the destination buffer is smaller
+    //  than 69 bytes
     char date_time_str[70];
     memset(date_time_str, 0, 70);
     snprintf(date_time_str, 69, "%04u/%02u/%02u %02d:%02d:%02d",
@@ -123,9 +125,9 @@ void winupdate() {
     wattroff(headwin, A_REVERSE);
     wrefresh(headwin);
 
-    /* Draw interface table */
-    /* TODO: indicate the driver being used by each interface */
-    /* TODO: allow sorting by: ifindex, ifname, rx count, ... */
+    //  Draw interface table
+    //TODO: indicate the driver being used by each interface
+    //TODO: allow sorting by: ifindex, ifname, rx count, ...
     werase(ifwin);
     for (int i = 0; i < num_interfaces; i++) {
         struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
@@ -135,7 +137,7 @@ void winupdate() {
         mvwprintw(ifwin, i, 25, "%u", wi->wiphy);
         mvwprintw(ifwin, i, 30, "%s", wi->wiphy_name);
         mvwprintw(ifwin, i, 45, "%lu", wi->packet_count);
-        /*mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());*/
+        //mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
     }
 
     mvwprintw(ifwin, LINES - 2, 0, "LINES, COLS = %d, %d", LINES, COLS);
@@ -155,7 +157,7 @@ void sighandler(int signum) {
 }
 
 int handle_message(const struct nlmsghdr* nlh, int len) {
-    /*printf("in handle_message\n");*/
+    //printf("in handle_message\n");
     const char* tmp_str;
 
     while (mnl_nlmsg_ok(nlh, len)) {
@@ -290,7 +292,7 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
 }
 
 void handle_response(struct mnl_socket* sock) {
-    /*printf("in handle_response\n");*/
+    //printf("in handle_response\n");
 
     int ret;
 
@@ -305,7 +307,7 @@ void handle_response(struct mnl_socket* sock) {
         }
     }
 
-    /*printf("Done handling response\n");*/
+    //printf("Done handling response\n");
 }
 
 int get_nl80211_family_id() {
@@ -425,7 +427,7 @@ int get_wiphy(struct wifi_interface* wi) {
     genlh->version = 2;
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, wi->ifindex);
 
-    /*mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));*/
+    //mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));
 
     if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
         fprintf(stderr, "mnl_socket_sendto failed");
@@ -455,7 +457,7 @@ int get_interface(struct wifi_interface* wi) {
     genlh->version = 2;
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, wi->ifindex);
 
-    /*mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));*/
+    //mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));
 
     if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
         fprintf(stderr, "mnl_socket_sendto failed");
@@ -486,7 +488,7 @@ int set_monitor_mode(struct wifi_interface* wi) {
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFINDEX, wi->ifindex);
     mnl_attr_put_u32(nlh, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_MONITOR);
 
-    /*mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));*/
+    //mnl_nlmsg_fprintf(stderr, nl_socket_buffer, nlh->nlmsg_len, sizeof(struct genlmsghdr));
 
     if (mnl_socket_sendto(nl_genl_socket, nlh, nlh->nlmsg_len) < 0) {
         fprintf(stderr, "mnl_socket_sendto failed");
@@ -538,14 +540,15 @@ void* packet_capture_fn(void* arg) {
 
     struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
-    /*uint8_t hash[HASH_SIZE];*/
 
     hash_table_t *ht = NULL;
-    ht = ht_alloc(1024);
+    ht = ht_alloc(1021);
 
-    /* TODO: handle case where pcap_next blocks until a 1st packet is received */
+    //TODO: handle case where pcap_next blocks until a 1st packet is received
+    time_t now;
+    int index;
     while (!quit) {
-        /* Wait for a packet from libpcap */
+        //  Wait for a packet from libpcap
         pcap_next_ex(p, &pcap_hdr, &data);
 
         wi->packet_count++;
@@ -558,7 +561,7 @@ void* packet_capture_fn(void* arg) {
            must make a copy of them.
            See: https://www.tcpdump.org/manpages/pcap_next_ex.3pcap.html */
 
-        /* Look for radiotap header */
+        //  Look for radiotap header
         size_t rt_len = 0;
         if (pcap_hdr->len > RT_HDR_SIZE) {
             const struct ieee80211_radiotap_header* rth = (const struct ieee80211_radiotap_header*)data;
@@ -572,27 +575,27 @@ void* packet_capture_fn(void* arg) {
             }
         }
 
-        /* There's a weird bug where somehow rt_len ends up being the same
-           as pcap_hdr->len, which causes an integer overflow below.
-           TODO: Diagnose the weird bug */
+        //  There's a weird bug where somehow rt_len ends up being the same
+        //  as pcap_hdr->len, which causes an integer overflow below.
+        //TODO: Diagnose the weird bug
         if (rt_len == pcap_hdr->len) {
             rt_len = 0;
         }
 
-        /* If the last 4 bytes match an FCS over the frame, not counting the 
-           radiotap header and last 4 bytes, the frame has an FCS present (and we
-           need to ignore it when hashing) */
+        //  If the last 4 bytes match an FCS over the frame, not counting the 
+        //  radiotap header and last 4 bytes, the frame has an FCS present (and we
+        //  need to ignore it when hashing)
         size_t fcs_len = 0;
         const uint32_t fcs = calc_crc(data + rt_len, pcap_hdr->len - rt_len - 4);
         if (data[pcap_hdr->len - 4] == (uint8_t)(fcs >> 24) &&
             data[pcap_hdr->len - 3] == (uint8_t)(fcs >> 16) &&
             data[pcap_hdr->len - 2] == (uint8_t)(fcs >> 8) &&
             data[pcap_hdr->len - 1] == (uint8_t)(fcs)) {
-            /* Found an FCS */
+            //  Found an FCS
             fcs_len = 4;
         }
 
-        /* Generate a SHA-256 hash over the packet data, considering the offset */
+        //  Generate a SHA-256 hash over the packet data, considering the offset
         EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
         EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
         EVP_DigestUpdate(mdctx, data + rt_len, pcap_hdr->len - rt_len - fcs_len);
@@ -601,9 +604,28 @@ void* packet_capture_fn(void* arg) {
         EVP_DigestFinal_ex(mdctx, digest, &digest_len);
         EVP_MD_CTX_free(mdctx);
 
-        /* TODO: compare packet hashes across capture threads to identify missing packets */
-        //time_t now = time(NULL);
-        //ht_update(ht, digest, now);
+        //TODO: compare packet hashes across capture threads to identify missing packets
+        now = time(NULL);
+        
+        //  Update packets for this interface
+        pthread_mutex_lock(&interface_packets_mutex[wi->ai]);
+        index = ht_search(interface_packets[wi->ai], digest);
+        if (index == -1) {
+            int q = ht_insert2(interface_packets[wi->ai], digest, now);
+        } else {
+            interface_packets[wi->ai]->elements[index]->t = now;
+        }
+        pthread_mutex_unlock(&interface_packets_mutex[wi->ai]);
+
+        //  Update all packets
+        pthread_mutex_lock(&all_packets_mutex);
+        index = ht_search(all_packets, digest);
+        if (index == -1) {
+            ht_insert2(all_packets, digest, now);
+        } else {
+            all_packets->elements[index]->t = now;
+        }
+        pthread_mutex_unlock(&all_packets_mutex);
     }
 
     ht_free(ht);
@@ -634,8 +656,8 @@ int main(int argc, char* argv[]) {
         goto cleanup_nl_socket_buffer;
     }
 
-    /* Configure program options */
-    /* TODO: add support for HT channels */
+    //  Configure program options
+    //TODO: add support for HT channels
     struct option long_opts[] = {
         { "channel", required_argument, 0, 'c' },
         { "interface", required_argument, 0, 'i' },
@@ -662,7 +684,7 @@ int main(int argc, char* argv[]) {
         break;
 
         case 'i': {
-            /* Check if the interface is real */
+            //  Check if the interface is real
             const int ifindex = if_nametoindex(optarg);
             if (ifindex > 0) {
                 printf("Using interface %s\n", optarg);
@@ -691,7 +713,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    /* Establish netlink socket connections */
+    //  Establish netlink socket connections
     nl_route_socket = mnl_socket_open(NETLINK_ROUTE);
     if (nl_route_socket == NULL) {
         fprintf(stderr, "mnl_socket_open failed");
@@ -718,63 +740,71 @@ int main(int argc, char* argv[]) {
         goto cleanup_nl_genl_socket;
     }
 
-    /* Determine nl80211 genl family id.  Annoyingly, this isn't a fixed value. */
+    //  Determine nl80211 genl family id.  Annoyingly, this isn't a fixed value.
     printf("Querying for nl80211 family id\n");
     if (get_nl80211_family_id() < 0) {
         fprintf(stderr, "get_nl80211_family_id failed\n");
         goto cleanup_nl_genl_socket;
     }
 
-    /* Configure interfaces */
+    //  Configure interfaces
     for (int i = 0; i < num_interfaces; i++) {
         struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
+        wi->ai = i;
 
         printf("Configuring (%d)%s\n", wi->ifindex, wi->ifname);
 
-        /* TODO: Remember initial interface mode and restore it when we're done */
+        //  TODO: Remember initial interface mode and restore it when we're done
         printf("Getting info for %s\n", wi->ifname);
         get_wiphy(wi);
         get_interface(wi);
 
-        /* Bring the interface down */
+        //  Bring the interface down
         printf("Bringing down %s\n", wi->ifname);
         if_down(wi);
 
-        /* Set monitor mode */
+        //  Set monitor mode
         printf("Setting %s to monitor mode\n", wi->ifname);
         set_monitor_mode(wi);
 
-        /* Bring the interface up */
+        //  Bring the interface up
         printf("Bringing up %s\n", wi->ifname);
         if_up(wi);
 
-        /* Set channel */
+        //  Set channel
         printf("Setting %s to channel %u\n", wi->ifname, channel);
         set_channel(wi->ifindex, channel_to_freq(channel));
 
-        /* Start capture thread */
+        //  Initialize hash table and mutex
+        interface_packets[i] = ht_alloc(1021);
+        pthread_mutex_init(&interface_packets_mutex[i], NULL);
+
+        //  Start capture thread
         pthread_create(&thread_id[i], NULL, packet_capture_fn, (void*)wi);
     }
 
-    /* Set up ncurses */
+    all_packets = ht_alloc(1021);
+    pthread_mutex_init(&all_packets_mutex, NULL);
+
+    //  Set up ncurses
     if (!log_mode) {
         initscr();
         noecho();
         wininit();
     }
 
-    /* Remember start time */
+    //  Remember start time
     start_time = time(NULL);
 
     while (!quit) {
         if (!log_mode) {
             winupdate();
 
-            /* This configures the timeout for ncurses getch() */
+            //  This configures the timeout for ncurses getch()
             timeout(1000);
 
-            /* Read input from the user - doubles as trigger for window resize
-            notification via KEY_RESIZE */
+            //  Read input from the user - doubles as trigger for window resize
+            //  notification via KEY_RESIZE
             int c = getch();
             switch (c) {
             case KEY_RESIZE:
@@ -793,10 +823,13 @@ int main(int argc, char* argv[]) {
 
     endwin();
 
-    /* Join capture threads */
+    //  Join capture threads
     for (int i = 0; i < num_interfaces; ++i) {
         pthread_join(thread_id[i], NULL);
+        ht_free(interface_packets[i]);
     }
+
+    ht_free(all_packets);
 
 cleanup_nl_genl_socket:
     mnl_socket_close(nl_genl_socket);
@@ -807,7 +840,7 @@ cleanup_nl_route_socket:
     nl_route_socket = NULL;
 
 cleanup_interfaces:
-    /* This should free all of the struct wifi_interface objects that were malloc()'d? */
+    //  This should free all of the struct wifi_interface objects that were malloc()'d?
     g_ptr_array_free(interfaces, TRUE);
     interfaces = NULL;
 

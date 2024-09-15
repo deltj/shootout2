@@ -58,6 +58,7 @@ hash_table_t * ht_alloc(const int size) {
     ht = malloc(sizeof(hash_table_t));
     ht->elements = calloc(sizeof(ht_element_t), alloc_size);
     ht->size = get_alloc_size(alloc_size);
+    ht->count = 0;
 
     for (int i = 0; i < ht->size; ++i) {
         ht->elements[i] = NULL;
@@ -97,13 +98,24 @@ int ht_insert(hash_table_t *ht, const uint8_t *k, const time_t t) {
     return -1;
 }
 
+int ht_insert2(hash_table_t *ht, const uint8_t *k, const time_t t) {
+    int q = h(ht, k, 0);
+    if (ht->elements[q] != NULL && ht->count > (ht->size / 2)) {
+        //  The preferred slot is taken, and the table is more than 50% full.  Resize it.
+        printf("resizing hash table\n");
+        ht_resize(ht, ht->size + 1);
+    }
+
+    return ht_insert(ht, k, t);
+}
+
 int ht_search(hash_table_t *ht, const uint8_t *k) {
     //  Open addressing search from CLRS 11.4
     const int m = ht->size;
     int i = 0;
     do {
         int q = h(ht, k, i);
-        printf("q=%d\n", q);
+        //printf("q=%d\n", q);
         if (ht->elements[q] != NULL && memcmp(ht->elements[q], k, KEY_SIZE) == 0) {
             return q;
         } else {
@@ -112,6 +124,36 @@ int ht_search(hash_table_t *ht, const uint8_t *k) {
     } while (i < m);
 
     return -1;
+}
+
+void ht_resize(hash_table_t *ht, const int size) {
+    if (size <= ht->size) {
+        return;
+    }
+
+    const int new_alloc_size = get_alloc_size(size);
+    const int old_size = ht->size;
+    const int old_count = ht->count;
+
+    //  Make a temporary copy of the elements
+    ht_element_t **tmp_elements = ht->elements;
+
+    //  Reinitialize the hash table with the new size
+    ht->elements = calloc(sizeof(ht_element_t), new_alloc_size);
+    ht->size = new_alloc_size;
+    ht->count = 0;
+    for (int i = 0; i < ht->size; ++i) {
+        ht->elements[i] = NULL;
+    }
+
+    //  Insert old elements into the new hash table
+    for (int i = 0; i < old_size; ++i) {
+        if (tmp_elements[i] != NULL) {
+            ht_insert(ht, tmp_elements[i]->k, tmp_elements[i]->t);            
+        }
+    }
+
+    free(tmp_elements);
 }
 
 void ht_delete(hash_table_t *ht, int q) {

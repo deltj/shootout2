@@ -36,8 +36,14 @@ void ht_free(hash_table_t *ht);
 /* Insert a new element into the hash table */
 int ht_insert(hash_table_t *ht, const uint8_t *k, const time_t t);
 
+/* Insert a new element into the hash table.  If the insert fails, resize the table and try again. */
+int ht_insert2(hash_table_t *ht, const uint8_t *k, const time_t t);
+
 /* Search the hash table for an element with key k */
 int ht_search(hash_table_t *ht, const uint8_t *k);
+
+/* Resize the hash table to the specified size (must be larger than current size) */
+void ht_resize(hash_table_t *ht, const int size);
 
 /* Delete an element from the hash table at index q */
 void ht_delete(hash_table_t *ht, int q);

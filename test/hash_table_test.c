@@ -184,6 +184,40 @@ START_TEST(ht_delete_test2) {
     ht_free(ht);
 }
 
+START_TEST(ht_resize_test1) {
+    hash_table_t * ht = NULL;
+
+    ht = ht_alloc(1021);
+
+    ck_assert_ptr_nonnull(ht);
+
+    const uint8_t data[32] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    int idx1 = ht_insert(ht, data, 0);
+    int idx2 = ht_search(ht, data);
+
+    ck_assert_int_lt(idx1, 1021);
+    ck_assert_int_eq(idx1, idx2);
+    ck_assert_int_eq(ht->count, 1);
+
+    ht_resize(ht, 2039);
+
+    ck_assert_int_eq(2039, ht->size);
+    ck_assert_int_eq(1, ht->count);
+
+    int idx3 = ht_search(ht, data);
+
+    ck_assert_int_ge(idx3, 0);
+    ck_assert_int_le(idx3, 2039);
+
+    ht_free(ht);
+}
+
 Suite *suite(void) {
     Suite *s;
     TCase *tc_ht_alloc_test1;
@@ -193,6 +227,7 @@ Suite *suite(void) {
     TCase *tc_ht_search_test;
     TCase *tc_ht_delete_test1;
     TCase *tc_ht_delete_test2;
+    TCase *tc_ht_resize_test1;
 
     s = suite_create("hash_table");
 
@@ -203,6 +238,7 @@ Suite *suite(void) {
     tc_ht_search_test = tcase_create("ht_search_test");
     tc_ht_delete_test1 = tcase_create("ht_delete_test1");
     tc_ht_delete_test2 = tcase_create("ht_delete_test2");
+    tc_ht_resize_test1 = tcase_create("ht_resize_test1");
 
     tcase_add_test(tc_ht_alloc_test1, ht_alloc_test1);
     tcase_add_test(tc_ht_alloc_test2, ht_alloc_test2);
@@ -211,6 +247,7 @@ Suite *suite(void) {
     tcase_add_test(tc_ht_search_test, ht_search_test);
     tcase_add_test(tc_ht_delete_test1, ht_delete_test1);
     tcase_add_test(tc_ht_delete_test2, ht_delete_test2);
+    tcase_add_test(tc_ht_resize_test1, ht_resize_test1);
 
     suite_add_tcase(s, tc_ht_alloc_test1);
     suite_add_tcase(s, tc_ht_alloc_test2);
@@ -219,6 +256,7 @@ Suite *suite(void) {
     suite_add_tcase(s, tc_ht_search_test);
     suite_add_tcase(s, tc_ht_delete_test1);
     suite_add_tcase(s, tc_ht_delete_test2);
+    suite_add_tcase(s, tc_ht_resize_test1);
 
     return s;
 }
