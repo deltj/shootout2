@@ -9,7 +9,6 @@ set(CMAKE_C_FLAGS "-Wall -Wextra -g")
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GLIB2 REQUIRED glib-2.0)
 pkg_check_modules(PCAP REQUIRED libpcap)
 pkg_check_modules(NL3 REQUIRED libnl-3.0)
 pkg_check_modules(MNL REQUIRED libmnl)

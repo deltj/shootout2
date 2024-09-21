@@ -134,7 +134,7 @@ void winupdate() {
         mvwprintw(ifwin, i, 5,  "%s", interfaces[i].ifname);
         mvwprintw(ifwin, i, 25, "%u", interfaces[i].wiphy);
         mvwprintw(ifwin, i, 30, "%s", interfaces[i].wiphy_name);
-        mvwprintw(ifwin, i, 45, "%lu", interfaces[i].packet_count);
+        mvwprintw(ifwin, i, 45, "%llu", interfaces[i].packet_count);
         //mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
     }
 
@@ -168,10 +168,10 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
 
         case NLMSG_ERROR: {
             const struct nlmsgerr* error = (const struct nlmsgerr*)mnl_nlmsg_get_payload(nlh);
-            if (!error->error) {
+            if (error->error == NLE_SUCCESS) {
                 printf("Received genl ACK\n");
             } else {
-                fprintf(stderr, "Received genl Error\n");
+                fprintf(stderr, "Received genl error %d\n", error->error);
                 mnl_nlmsg_fprintf(stderr, (void *)nlh, nlh->nlmsg_len, 0);
             }
             seq += 1;
@@ -383,6 +383,9 @@ int if_down(struct wifi_interface* wi) {
     return 0;
 }
 
+//  Note: this will fail if wifi radios are soft-disabled (e.g. with nmcli radio wifi off)
+//  When this happens, the error code from nm80211 is -132
+//TODO: use netlink to turn the wifi radio switch first
 int if_up(struct wifi_interface* wi) {
     struct nlmsghdr* nlh = mnl_nlmsg_put_header(nl_socket_buffer);
     struct ifinfomsg* ifinfo = (struct ifinfomsg*)mnl_nlmsg_put_extra_header(nlh, sizeof(struct ifinfomsg));
