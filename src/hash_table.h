@@ -36,7 +36,8 @@ void ht_free(hash_table_t *ht);
 /* Insert a new element into the hash table */
 int ht_insert(hash_table_t *ht, const uint8_t *k, const time_t t);
 
-/* Insert a new element into the hash table.  If the insert fails, resize the table and try again. */
+/* Insert a new element into the hash table.  If the preferred slot is
+   unavailable and the table is > 50% full, resize the table and try again. */
 int ht_insert2(hash_table_t *ht, const uint8_t *k, const time_t t);
 
 /* Search the hash table for an element with key k */

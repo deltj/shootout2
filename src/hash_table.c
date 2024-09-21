@@ -101,8 +101,7 @@ int ht_insert(hash_table_t *ht, const uint8_t *k, const time_t t) {
 int ht_insert2(hash_table_t *ht, const uint8_t *k, const time_t t) {
     int q = h(ht, k, 0);
     if (ht->elements[q] != NULL && ht->count > (ht->size / 2)) {
-        //  The preferred slot is taken, and the table is more than 50% full.  Resize it.
-        printf("resizing hash table\n");
+        //  The preferred slot is taken and the table is more than 50% full
         ht_resize(ht, ht->size + 1);
     }
 
@@ -115,7 +114,6 @@ int ht_search(hash_table_t *ht, const uint8_t *k) {
     int i = 0;
     do {
         int q = h(ht, k, i);
-        //printf("q=%d\n", q);
         if (ht->elements[q] != NULL && memcmp(ht->elements[q], k, KEY_SIZE) == 0) {
             return q;
         } else {
@@ -160,7 +158,7 @@ void ht_delete(hash_table_t *ht, int q) {
     //  Adapted from linear probing hash delete from CLRS 11.5.1
     const int m = ht->size;
     
-    printf("q=%d\n", q);
+    //printf("q=%d\n", q);
     if (ht->elements[q] == NULL) {
         return;
     }
@@ -173,17 +171,17 @@ void ht_delete(hash_table_t *ht, int q) {
         int ii = q + i % m;
         int jj = (q + i + 1) % m;
 
-        printf("ii=%d\n", ii);
-        printf("jj=%d\n", jj);
+        //printf("ii=%d\n", ii);
+        //printf("jj=%d\n", jj);
 
         //  Check if the next element is populated and the key matches
         if (ht->elements[jj] != NULL && memcmp(e->k, ht->elements[jj]->k, KEY_SIZE) == 0) {
             //  Shift it to the previous slot
-            printf("moving %d to %d\n", jj, ii);
+            //printf("moving %d to %d\n", jj, ii);
             ht->elements[ii] = ht->elements[jj];
             ht->elements[jj] = NULL;
         } else {
-            printf("done\n");
+            //printf("done\n");
             break;
         }
     }

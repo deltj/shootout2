@@ -18,7 +18,6 @@
 #include <time.h>
 
 #include <getopt.h>
-#include <glib.h>
 #include <libmnl/libmnl.h>
 #include <ncurses.h>
 #include <openssl/evp.h>
@@ -37,7 +36,7 @@
 /*
  * Structure containing information about interfaces under test
  */
-struct wifi_interface {
+typedef struct wifi_interface {
     char ifname[MAX_IF_NAME_LEN];
     int ifindex;
     uint32_t wiphy;
@@ -47,7 +46,8 @@ struct wifi_interface {
     int prev_mode;
     char reg_dom[3];
     unsigned long long packet_count;
-};
+    float percent_observed;
+} wifi_interface_t;
 
 /*
  * Radiotap header structure
@@ -63,7 +63,6 @@ bool quit = false;
 bool waiting_for_nl80211_family_name = false;
 bool waiting_for_nl80211_phy = false;
 bool waiting_for_nl80211_interface = false;
-GPtrArray* interfaces = NULL;
 int num_interfaces = 0;
 struct mnl_socket* nl_route_socket = NULL;
 struct mnl_socket* nl_genl_socket = NULL;
@@ -75,6 +74,7 @@ WINDOW* ifwin = NULL;
 time_t start_time;
 uint32_t tmp_wiphy;
 char tmp_wiphy_name[MAX_WIPHY_NAME_LEN];
+wifi_interface_t interfaces[MAX_INTERFACES];
 hash_table_t *all_packets;
 pthread_mutex_t all_packets_mutex;
 hash_table_t *interface_packets[MAX_INTERFACES];
@@ -130,13 +130,11 @@ void winupdate() {
     //TODO: allow sorting by: ifindex, ifname, rx count, ...
     werase(ifwin);
     for (int i = 0; i < num_interfaces; i++) {
-        struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
-
-        mvwprintw(ifwin, i, 1,  "%d", wi->ifindex);
-        mvwprintw(ifwin, i, 5,  "%s", wi->ifname);
-        mvwprintw(ifwin, i, 25, "%u", wi->wiphy);
-        mvwprintw(ifwin, i, 30, "%s", wi->wiphy_name);
-        mvwprintw(ifwin, i, 45, "%lu", wi->packet_count);
+        mvwprintw(ifwin, i, 1,  "%d", interfaces[i].ifindex);
+        mvwprintw(ifwin, i, 5,  "%s", interfaces[i].ifname);
+        mvwprintw(ifwin, i, 25, "%u", interfaces[i].wiphy);
+        mvwprintw(ifwin, i, 30, "%s", interfaces[i].wiphy_name);
+        mvwprintw(ifwin, i, 45, "%lu", interfaces[i].packet_count);
         //mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
     }
 
@@ -527,6 +525,15 @@ int set_channel(const int ifindex, const uint32_t freq) {
     return 0;
 }
 
+void update_table(hash_table_t *ht, const uint8_t *k, const time_t t) {
+    int index = ht_search(ht, k);
+    if (index == -1) {
+        ht_insert2(ht, k, t);
+    } else {
+        ht->elements[index]->t = t;
+    }
+}
+
 void* packet_capture_fn(void* arg) {
     char errbuf[PCAP_ERRBUF_SIZE];
     struct wifi_interface* wi = (struct wifi_interface*)arg;
@@ -541,12 +548,8 @@ void* packet_capture_fn(void* arg) {
     struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
 
-    hash_table_t *ht = NULL;
-    ht = ht_alloc(1021);
-
     //TODO: handle case where pcap_next blocks until a 1st packet is received
     time_t now;
-    int index;
     while (!quit) {
         //  Wait for a packet from libpcap
         pcap_next_ex(p, &pcap_hdr, &data);
@@ -609,26 +612,14 @@ void* packet_capture_fn(void* arg) {
         
         //  Update packets for this interface
         pthread_mutex_lock(&interface_packets_mutex[wi->ai]);
-        index = ht_search(interface_packets[wi->ai], digest);
-        if (index == -1) {
-            int q = ht_insert2(interface_packets[wi->ai], digest, now);
-        } else {
-            interface_packets[wi->ai]->elements[index]->t = now;
-        }
+        update_table(interface_packets[wi->ai], digest, now);
         pthread_mutex_unlock(&interface_packets_mutex[wi->ai]);
 
         //  Update all packets
         pthread_mutex_lock(&all_packets_mutex);
-        index = ht_search(all_packets, digest);
-        if (index == -1) {
-            ht_insert2(all_packets, digest, now);
-        } else {
-            all_packets->elements[index]->t = now;
-        }
+        update_table(all_packets, digest, now);
         pthread_mutex_unlock(&all_packets_mutex);
     }
-
-    ht_free(ht);
 
     pcap_close(p);
 
@@ -637,8 +628,49 @@ void* packet_capture_fn(void* arg) {
     return 0;
 }
 
+void* stat_fn(void*) {
+
+    time_t now;
+    int i, j;
+    //unsigned long long observed;
+    //unsigned long long total;
+    while (!quit) {
+        now = time(NULL);
+
+        pthread_mutex_lock(&all_packets_mutex);
+
+        //  Iterate the all-packets table
+        for (i = 0; i < all_packets->size; ++i) {
+            if (all_packets->elements[i] != NULL) {
+                //  If this packet is less than 2 seconds old, skip it
+                if (now - all_packets->elements[i]->t < 2) {
+                    continue;
+                }
+
+                //  Search all interface tables for this packet
+                for (j = 0; j < num_interfaces; ++j) {
+                    printf("Count for interface %d = %llu\n", j, interfaces[j].packet_count);
+                }
+
+                ht_delete(all_packets, i);
+            }
+        }
+
+        printf("all packets table count: %d\n", all_packets->count);
+
+        pthread_mutex_unlock(&all_packets_mutex);
+
+        sleep(1);
+    }
+
+    printf("Stopping stat thread\n");
+
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
     int retval = EXIT_SUCCESS;
+    pthread_t stat_thread_id;
     pthread_t thread_id[MAX_INTERFACES];
     bool log_mode = false;
 
@@ -649,12 +681,6 @@ int main(int argc, char* argv[]) {
     }
 
     signal(SIGINT, sighandler);
-
-    interfaces = g_ptr_array_new();
-    if (interfaces == NULL) {
-        retval = EXIT_FAILURE;
-        goto cleanup_nl_socket_buffer;
-    }
 
     //  Configure program options
     //TODO: add support for HT channels
@@ -668,6 +694,7 @@ int main(int argc, char* argv[]) {
     const char* optstr = "c:i:l";
     uint32_t channel = 1;
     int opt;
+    int ai = 0;
     while ((opt = getopt_long(argc, argv, optstr, long_opts, &optind)) != -1) {
         switch (opt) {
         case 'c': {
@@ -678,7 +705,7 @@ int main(int argc, char* argv[]) {
             } else {
                 fprintf(stderr, "Invalid or unsupported channel: %s\n", optarg);
                 retval = EXIT_FAILURE;
-                goto cleanup_interfaces;
+                goto cleanup_nl_socket_buffer;
             }
         }
         break;
@@ -688,16 +715,16 @@ int main(int argc, char* argv[]) {
             const int ifindex = if_nametoindex(optarg);
             if (ifindex > 0) {
                 printf("Using interface %s\n", optarg);
-                struct wifi_interface* wi = malloc(sizeof(struct wifi_interface));
-                memset(wi, 0, sizeof(struct wifi_interface));
-                strncpy(wi->ifname, optarg, MAX_IF_NAME_LEN);
-                wi->ifindex = if_nametoindex(optarg);
-                g_ptr_array_add(interfaces, (gpointer)wi);
+                memset(&interfaces[ai], 0, sizeof(struct wifi_interface));
+                strncpy(interfaces[ai].ifname, optarg, MAX_IF_NAME_LEN);
+                interfaces[ai].ifindex = if_nametoindex(optarg);
+                interfaces[ai].ai = ai;
                 num_interfaces++;
+                ai++;
             } else {
                 fprintf(stderr, "Interface %s doesn't seem to exist\n", optarg);
                 retval = EXIT_FAILURE;
-                goto cleanup_interfaces;
+                goto cleanup_nl_socket_buffer;
             }
         }
         break;
@@ -718,7 +745,7 @@ int main(int argc, char* argv[]) {
     if (nl_route_socket == NULL) {
         fprintf(stderr, "mnl_socket_open failed");
         retval = EXIT_FAILURE;
-        goto cleanup_interfaces;
+        goto end;
     }
 
     if (mnl_socket_bind(nl_route_socket, 0, 4) < 0) {
@@ -747,44 +774,44 @@ int main(int argc, char* argv[]) {
         goto cleanup_nl_genl_socket;
     }
 
+    all_packets = ht_alloc(1021);
+    pthread_mutex_init(&all_packets_mutex, NULL);
+
+    //  Start stat thread
+    pthread_create(&stat_thread_id, NULL, stat_fn, (void *)NULL);
+
     //  Configure interfaces
     for (int i = 0; i < num_interfaces; i++) {
-        struct wifi_interface* wi = (struct wifi_interface*)g_ptr_array_index(interfaces, i);
-        wi->ai = i;
-
-        printf("Configuring (%d)%s\n", wi->ifindex, wi->ifname);
+        printf("Configuring (%d)%s\n", interfaces[i].ifindex, interfaces[i].ifname);
 
         //  TODO: Remember initial interface mode and restore it when we're done
-        printf("Getting info for %s\n", wi->ifname);
-        get_wiphy(wi);
-        get_interface(wi);
+        printf("Getting info for %s\n", interfaces[i].ifname);
+        get_wiphy(&interfaces[i]);
+        get_interface(&interfaces[i]);
 
         //  Bring the interface down
-        printf("Bringing down %s\n", wi->ifname);
-        if_down(wi);
+        printf("Bringing down %s\n", interfaces[i].ifname);
+        if_down(&interfaces[i]);
 
         //  Set monitor mode
-        printf("Setting %s to monitor mode\n", wi->ifname);
-        set_monitor_mode(wi);
+        printf("Setting %s to monitor mode\n", interfaces[i].ifname);
+        set_monitor_mode(&interfaces[i]);
 
         //  Bring the interface up
-        printf("Bringing up %s\n", wi->ifname);
-        if_up(wi);
+        printf("Bringing up %s\n", interfaces[i].ifname);
+        if_up(&interfaces[i]);
 
         //  Set channel
-        printf("Setting %s to channel %u\n", wi->ifname, channel);
-        set_channel(wi->ifindex, channel_to_freq(channel));
+        printf("Setting %s to channel %u\n", interfaces[i].ifname, channel);
+        set_channel(interfaces[i].ifindex, channel_to_freq(channel));
 
         //  Initialize hash table and mutex
         interface_packets[i] = ht_alloc(1021);
         pthread_mutex_init(&interface_packets_mutex[i], NULL);
 
         //  Start capture thread
-        pthread_create(&thread_id[i], NULL, packet_capture_fn, (void*)wi);
+        pthread_create(&thread_id[i], NULL, packet_capture_fn, (void*)&interfaces[i]);
     }
-
-    all_packets = ht_alloc(1021);
-    pthread_mutex_init(&all_packets_mutex, NULL);
 
     //  Set up ncurses
     if (!log_mode) {
@@ -823,6 +850,9 @@ int main(int argc, char* argv[]) {
 
     endwin();
 
+    //  Join stat thread
+    pthread_join(stat_thread_id, NULL);
+
     //  Join capture threads
     for (int i = 0; i < num_interfaces; ++i) {
         pthread_join(thread_id[i], NULL);
@@ -838,11 +868,6 @@ cleanup_nl_genl_socket:
 cleanup_nl_route_socket:
     mnl_socket_close(nl_route_socket);
     nl_route_socket = NULL;
-
-cleanup_interfaces:
-    //  This should free all of the struct wifi_interface objects that were malloc()'d?
-    g_ptr_array_free(interfaces, TRUE);
-    interfaces = NULL;
 
 cleanup_nl_socket_buffer:
     free(nl_socket_buffer);
