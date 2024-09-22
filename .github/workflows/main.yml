@@ -2,12 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-     - name: test
-       run: echo test
+     - name: install deps
+       run: sudo apt install libpcap-dev libnl-3-200 libnl-nf-3-dev libmnl0 libmnl-dev libssl1.1 libssl-dev libncurses6 libncurses-dev check
+     - name: build
+       run: |
+         mkdir build
+         cd build
+         cmake ..
+         make
   
