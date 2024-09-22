@@ -1,6 +1,6 @@
 # shootout2
 
-[![Coverity Scan](https://scan.coverity.com/projects/20981/badge.svg)](https://scan.coverity.com/projects/deltj-shootout2)
+[![SonarCloud](https://sonarcloud.io/images/project_badges/sonarcloud-white.svg)](https://sonarcloud.io/summary/new_code?id=deltj_shootout2)
 
 ## Project Overview
 
