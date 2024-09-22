@@ -130,7 +130,7 @@ void winupdate() {
     //TODO: indicate the driver being used by each interface
     //TODO: allow sorting by: ifindex, ifname, rx count, ...
     werase(ifwin);
-    mvwprintw(ifwin, 0, 0, "name                ifidx wiphy phyname hit       miss");
+    mvwprintw(ifwin, 0, 0, "name                idx   phy   phyname hit       miss");
     for (int i = 0; i < num_interfaces; i++) {
         mvwprintw(ifwin, i + 1, 0,  "%s", interfaces[i].ifname);
         mvwprintw(ifwin, i + 1, 20, "%d", interfaces[i].ifindex);
@@ -542,24 +542,69 @@ void update_table(hash_table_t *ht, const uint8_t *k, const time_t t) {
 void* packet_capture_fn(void* arg) {
     char errbuf[PCAP_ERRBUF_SIZE];
     struct wifi_interface* wi = (struct wifi_interface*)arg;
+    int ret;
+
     printf("Starting capture thread for %s\n", wi->ifname);
 
-    pcap_t* p = pcap_open_live(wi->ifname, 800, 1, 100, errbuf);
+    //  See this issue and associated discussion:
+    //  https://github.com/the-tcpdump-group/libpcap/issues/572
+
+    pcap_t *p = pcap_create(wi->ifname, errbuf);
     if (p == NULL) {
-        fprintf(stderr, "pcap_open_live failed: %s\n", errbuf);
+        fprintf(stderr, "pcap_create failed: %s\n", errbuf);
+        return 0;
+    }
+
+    ret = pcap_set_snaplen(p, 5000);
+    if (ret != 0) {
+        fprintf(stderr, "pcap_set_snaplen failed\n");
+        pcap_close(p);
+        return 0;
+    }
+
+    ret = pcap_set_promisc(p, 1);
+    if (ret != 0) {
+        fprintf(stderr, "pcap_set_promisc failed\n");
+        pcap_close(p);
+        return 0;
+    }
+
+    ret = pcap_set_timeout(p, 1000);
+    if (ret != 0) {
+        fprintf(stderr, "pcap_set_timeout failed\n");
+        pcap_close(p);
+        return 0;
+    }
+
+    ret = pcap_set_immediate_mode(p, 1);
+    if (ret != 0) {
+        fprintf(stderr, "pcap_set_immediate_mode failed\n");
+        pcap_close(p);
+        return 0;
+    }
+
+    ret = pcap_setnonblock(p, 1, errbuf);
+    if (ret != 0) {
+        fprintf(stderr, "pcap_setnonblock failed\n");
+        pcap_close(p);
         return 0;
     }
 
     struct pcap_pkthdr* pcap_hdr;
     const uint8_t* data;
 
-    //TODO: handle case where pcap_next blocks until a 1st packet is received
+    pcap_activate(p);
+
     time_t now;
     while (!quit) {
         //  Wait for a packet from libpcap
-        pcap_next_ex(p, &pcap_hdr, &data);
+        ret = pcap_next_ex(p, &pcap_hdr, &data);
 
-        wi->packet_count++;
+        if (ret == 0) {
+            //  No data
+            sleep(1);
+            continue;
+        }
 
         /* Note from the man page for pcap_next_ex:
            The struct pcap_pkthdr and the packet data are not to be freed by
@@ -667,6 +712,9 @@ void* stat_fn(void*) {
                     if (-1 == ht_search(interface_packets[j], all_packets->elements[i]->k)) {
                         //  Interface j missed frame i
                         interfaces[j].frames_missed++;
+                    } else {
+                        //  Interface j received frame i
+                        interfaces[j].packet_count++;
                     }
 
                     pthread_mutex_unlock(&interface_packets_mutex[j]);
