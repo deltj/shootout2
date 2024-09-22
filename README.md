@@ -24,16 +24,16 @@ Shootout2 is still in development.  It may kind of work, but it's certainly not 
 * libpcap
 * libnl-3.0
 * libmnl
-* kernel-headers
+* kernel headers
 * openssl
 * ncurses
 * check
 
-Ubuntu/Kali:
+Debian-based distros (Ubuntu, kali, raspbian, etc.):
 
 `sudo apt install libpcap-dev libnl-3-200 libnl-nf-3-dev libmnl0 libmnl-dev libssl1.1 libssl-dev libncurses6 libncurses-dev check`
 
-RHEL/Rocky/Alma:
+RPM distros (RHEL, Rocky, etc.):
 
 `sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel check check-devel`
 

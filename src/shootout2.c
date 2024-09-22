@@ -46,6 +46,7 @@ typedef struct wifi_interface {
     int prev_mode;
     char reg_dom[3];
     unsigned long long packet_count;
+    unsigned long long frames_missed;
     float percent_observed;
 } wifi_interface_t;
 
@@ -129,13 +130,14 @@ void winupdate() {
     //TODO: indicate the driver being used by each interface
     //TODO: allow sorting by: ifindex, ifname, rx count, ...
     werase(ifwin);
+    mvwprintw(ifwin, 0, 0, "name                ifidx wiphy phyname hit       miss");
     for (int i = 0; i < num_interfaces; i++) {
-        mvwprintw(ifwin, i, 1,  "%d", interfaces[i].ifindex);
-        mvwprintw(ifwin, i, 5,  "%s", interfaces[i].ifname);
-        mvwprintw(ifwin, i, 25, "%u", interfaces[i].wiphy);
-        mvwprintw(ifwin, i, 30, "%s", interfaces[i].wiphy_name);
-        mvwprintw(ifwin, i, 45, "%llu", interfaces[i].packet_count);
-        //mvwprintw(ifwin, row, 30, "%lu", missByInterface[(*iit)->ifindex].size());
+        mvwprintw(ifwin, i + 1, 0,  "%s", interfaces[i].ifname);
+        mvwprintw(ifwin, i + 1, 20, "%d", interfaces[i].ifindex);
+        mvwprintw(ifwin, i + 1, 26, "%u", interfaces[i].wiphy);
+        mvwprintw(ifwin, i + 1, 32, "%s", interfaces[i].wiphy_name);
+        mvwprintw(ifwin, i + 1, 40, "%llu", interfaces[i].packet_count);
+        mvwprintw(ifwin, i + 1, 50, "%llu", interfaces[i].frames_missed);
     }
 
     mvwprintw(ifwin, LINES - 2, 0, "LINES, COLS = %d, %d", LINES, COLS);
@@ -645,6 +647,14 @@ void* stat_fn(void*) {
         //  Iterate the all-packets table
         for (i = 0; i < all_packets->size; ++i) {
             if (all_packets->elements[i] != NULL) {
+                //  The strategy for finding missed packets is to iterate all
+                //  observed packet hashes, checking whether each interface under
+                //  test has seen it.  However, I think if I check the interface
+                //  hash_tables too soon after first seeing the packet, there may
+                //  be some possibility of mistakenly counting a packet as missed
+                //  due to a timing coincidence.  To avoid this, I wait some time
+                //  before doing the miss check.
+
                 //  If this packet is less than 2 seconds old, skip it
                 if (now - all_packets->elements[i]->t < 2) {
                     continue;
@@ -652,14 +662,22 @@ void* stat_fn(void*) {
 
                 //  Search all interface tables for this packet
                 for (j = 0; j < num_interfaces; ++j) {
-                    printf("Count for interface %d = %llu\n", j, interfaces[j].packet_count);
+                    pthread_mutex_lock(&interface_packets_mutex[j]);
+
+                    if (-1 == ht_search(interface_packets[j], all_packets->elements[i]->k)) {
+                        //  Interface j missed frame i
+                        interfaces[j].frames_missed++;
+                    }
+
+                    pthread_mutex_unlock(&interface_packets_mutex[j]);
+                    //printf("Count for interface %d = %llu\n", j, interfaces[j].packet_count);
                 }
 
                 ht_delete(all_packets, i);
             }
         }
 
-        printf("all packets table count: %d\n", all_packets->count);
+        //printf("all packets table count: %d\n", all_packets->count);
 
         pthread_mutex_unlock(&all_packets_mutex);
 
