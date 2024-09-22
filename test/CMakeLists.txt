@@ -1,16 +1,16 @@
 
-add_executable(PacketHash_test
-    ../src/Packet.cpp
-    PacketHash_test.cpp)
-target_link_libraries(PacketHash_test
-    ${OPENSSL_LIBRARIES}
-    boost_unit_test_framework)
-add_test(PacketHash_test PacketHash_test)
+add_executable(crc_test
+    crc_test.c)
+target_link_libraries(crc_test
+    ${CHECK_LIBRARIES}
+    libshootout
+    )
+add_test(crc_test crc_test)
 
-add_executable(Packet_test
-    ../src/Packet.cpp
-    Packet_test.cpp)
-target_link_libraries(Packet_test
-    ${OPENSSL_LIBRARIES}
-    boost_unit_test_framework)
-add_test(Packet_test Packet_test)
+add_executable(hash_table_test
+    hash_table_test.c)
+target_link_libraries(hash_table_test
+    ${CHECK_LIBRARIES}
+    libshootout
+    )
+add_test(hash_table_test hash_table_test)

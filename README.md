@@ -21,21 +21,21 @@ Shootout2 is still in development.  It may kind of work, but it's certainly not 
 
 ### Dependencies
 
-* glib-2.0
 * libpcap
 * libnl-3.0
 * libmnl
 * kernel-headers
 * openssl
 * ncurses
+* check
 
 Ubuntu/Kali:
 
-`sudo apt install libglib2.0-0 libglib2.0-dev libpcap0.8 libpcap-dev libnl-3-200 libnl-nf-3-dev libmnl0 libmnl-dev libssl1.1 libssl-dev libncurses6 libncurses-dev`
+`sudo apt install libpcap-dev libnl-3-200 libnl-nf-3-dev libmnl0 libmnl-dev libssl1.1 libssl-dev libncurses6 libncurses-dev check`
 
-RHEL/Rocky/Alma 9:
+RHEL/Rocky/Alma:
 
-`sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel`
+`sudo dnf install -y glib2 glib2-devel libpcap libpcap-devel libnl3 libnl3-devel libmnl libmnl-devel openssl openssl-devel ncurses ncurses-devel check check-devel`
 
 ### Build
 

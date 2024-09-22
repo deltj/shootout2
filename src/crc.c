@@ -1,13 +1,20 @@
 /**
- * shootout2 - 802.11 monitor mode performance evaluator
+ * This file is part of shootout2 - 802.11 monitor mode performance evaluator
  *
  * Copyright 2024 Ted DeLoggio <deltj@outlook.com>
  */
-#include <byteswap.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "crc.h"
 
-const uint32_t crc32_ccitt_table[256] = {
+#include <byteswap.h>
+
+/*  The 802.11 FCS field is a 32-bit CRC with polynomial 
+    x^32 + x^26 + x^23 + x^22 + x^16 + x^12 + x^11 + x^10 + x^8 + x^7 + x^5 + x^4 + x^2 + x + 1
+
+    Which is the same polynomial used by 802.3 Ethernet
+   
+    And described in ITU-T Recommendation V.42
+*/
+const uint32_t crc32_table[256] = {
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419,
     0x706af48f, 0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4,
     0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07,
@@ -66,16 +73,16 @@ const uint32_t crc32_ccitt_table[256] = {
  * Note: This function is adapted from the Wireshark source, as described here:
  * https://gist.github.com/glennzw/6365693
  */
-uint32_t calcfcs(const uint8_t *const buf, const size_t buf_len) {
+uint32_t calc_crc(const uint8_t *const buf, const size_t buf_len) {
     uint32_t crc32 = 0xffffffff;
 
     if(buf != NULL && buf_len > 0) {
         for(size_t i = 0; i < buf_len; i++) {
-            crc32 = crc32_ccitt_table[(crc32 ^ buf[i]) & 0xff] ^ (crc32 >> 8);
+            crc32 = crc32_table[(crc32 ^ buf[i]) & 0xff] ^ (crc32 >> 8);
         }
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        crc32 = __bswap_32(crc32);
+        //crc32 = __bswap_32(crc32);
 #endif
     }
 
