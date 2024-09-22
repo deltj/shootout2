@@ -5,13 +5,13 @@
 ## Project Overview
 
 Shootout 2 is an evolution of the previous Kismet-based shootout ([kis_shootout_python](https://github.com/deltj/kis_shootout_python)).  The previous shootout tool has some shortcomings that this tool aims to address:
-1. Missing Packets - Without a controlled source of 802.11 packets, we can't detect the case of a packet being missed by all interfaces under test.
-2. Relative Performance - If we only know the total number of packets seen by each interface under test, our ability to detect some performance issues is limited.  This is related to the Missing Packets problem; if interface A sees packet 1 but not packet 2, and interface B sees packet 2 but not packet 1, we'll be tricked into thinking these interfaces have equivalent performance when in fact they do not.
-3. Diagnostics - Shootout2 allows missed packets to be saved for later analysis, so that the specific parameters (e.g. modulation type, channel, etc) of missed packets can be understood.
+1. Relative Performance - If we only know the total number of packets seen by each interface under test, our ability to detect some performance issues is limited.  This is related to the Missing Packets problem; if interface A sees packet 1 but not packet 2, and interface B sees packet 2 but not packet 1, we'll be tricked into thinking these interfaces have equivalent performance when in fact they do not.
+2. Diagnostics - Shootout2 allows missed packets to be saved for later analysis, so that the specific parameters (e.g. modulation type, channel, etc) of missed packets can be understood.
+3. Missing Packets - Without a controlled source of 802.11 packets, we can't detect the case of a packet being missed by all interfaces under test.
 
-To address these issues, shootout 2 uses a control interface with packet injection.  This isn't perfect (unless you use cables and attenuators to directly connect the control interface to the interfaces under test, and maybe use an RF shielded test environment for good measure...) because the interfaces under test will still receive "clutter" packets that are sent by systems not involved in the test but happen to be nearby, but I think it's an improvement.
+Shootout2 computes a SHA-256 hash for each observed packet (ignoring the radiotap header and FCS) during the test so that it can know exactly which interfaces received which packets.  This should help identify more specific performance issues, at the cost of some CPU time to compute the hashes.
 
-Shootout2 computes a SHA-256 hash for each observed packet (ignoring the radiotap header and FCS) during the test so that it can know exactly which interfaces received which packets.  This should help identify more specific performance issues.
+I plan to add a control interface with packet injection (eventually).  This won't be perfect (unless you use cables and attenuators to directly connect the control interface to the interfaces under test, and maybe use an RF shielded test environment for good measure...) because the interfaces under test may still receive "clutter" packets that are sent by systems not involved in the test that happen to be nearby.
 
 ## Status
 

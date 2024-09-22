@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <dirent.h>
 #include <linux/nl80211.h>
 #include <net/if.h>
 #include <netlink/netlink.h>
@@ -15,6 +16,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #include <getopt.h>
@@ -30,6 +32,8 @@
 #define MAX_INTERFACES 100  //  Do I think anyone will try to test more than 100 interfaces?
 #define MAX_IF_NAME_LEN 52
 #define MAX_WIPHY_NAME_LEN 40
+#define MAX_CONN_TYPE_LEN 40
+#define MAX_DRIVER_NAME_LEN 40
 #define HASH_SIZE 32
 #define RT_HDR_SIZE 8
 
@@ -41,6 +45,8 @@ typedef struct wifi_interface {
     int ifindex;
     uint32_t wiphy;
     char wiphy_name[MAX_WIPHY_NAME_LEN];
+    char connection_type[MAX_CONN_TYPE_LEN];
+    char driver_name[MAX_DRIVER_NAME_LEN];
     int ai; //  Array index for hash tables and mutexes
 
     int prev_mode;
@@ -112,6 +118,7 @@ void winupdate() {
              tt->tm_min,
              tt->tm_sec);
 
+    //TODO: Show elapsed time as h:m:s
     const int delta_seconds = difftime(curr_time, start_time);
     char elapsed_time_str[70];
     memset(elapsed_time_str, 0, 70);
@@ -130,14 +137,16 @@ void winupdate() {
     //TODO: indicate the driver being used by each interface
     //TODO: allow sorting by: ifindex, ifname, rx count, ...
     werase(ifwin);
-    mvwprintw(ifwin, 0, 0, "name                idx   phy   phyname hit       miss");
+    mvwprintw(ifwin, 0, 0, "name                conn  driver     idx   phy   phyname hit       miss");
     for (int i = 0; i < num_interfaces; i++) {
         mvwprintw(ifwin, i + 1, 0,  "%s", interfaces[i].ifname);
-        mvwprintw(ifwin, i + 1, 20, "%d", interfaces[i].ifindex);
-        mvwprintw(ifwin, i + 1, 26, "%u", interfaces[i].wiphy);
-        mvwprintw(ifwin, i + 1, 32, "%s", interfaces[i].wiphy_name);
-        mvwprintw(ifwin, i + 1, 40, "%llu", interfaces[i].packet_count);
-        mvwprintw(ifwin, i + 1, 50, "%llu", interfaces[i].frames_missed);
+        mvwprintw(ifwin, i + 1, 20, "%s", interfaces[i].connection_type);
+        mvwprintw(ifwin, i + 1, 26, "%s", interfaces[i].driver_name);
+        mvwprintw(ifwin, i + 1, 37, "%d", interfaces[i].ifindex);
+        mvwprintw(ifwin, i + 1, 43, "%u", interfaces[i].wiphy);
+        mvwprintw(ifwin, i + 1, 49, "%s", interfaces[i].wiphy_name);
+        mvwprintw(ifwin, i + 1, 57, "%llu", interfaces[i].packet_count);
+        mvwprintw(ifwin, i + 1, 67, "%llu", interfaces[i].frames_missed);
     }
 
     mvwprintw(ifwin, LINES - 2, 0, "LINES, COLS = %d, %d", LINES, COLS);
@@ -417,6 +426,49 @@ int if_up(struct wifi_interface* wi) {
     return 0;
 }
 
+int read_sys(struct wifi_interface* wi) {
+    char path[1000];
+    char link_path[1000];
+    snprintf(path, 1000, "/sys/class/net/%s/device/driver/module/drivers/", wi->ifname);
+
+    //  Check if the sys path exists and is a directory
+    struct stat sb;
+    if (stat(path, &sb) == 0 && S_ISDIR(sb.st_mode)) {
+        //  Look for the driver link
+        const char *delim = ":";
+        DIR *dir;
+        struct dirent *ent;
+        if ((dir = opendir(path)) != NULL) {
+            while ((ent = readdir(dir)) != NULL) {
+                printf("%s\n", ent->d_name);
+                snprintf(link_path, 1000, "%s/%s", path, ent->d_name);
+                if (lstat(link_path, &sb) == 0 && S_ISLNK(sb.st_mode)) {
+                    size_t idx = 0;
+                    char *tok = strtok(ent->d_name, delim);
+                    while (tok) {
+                        if (idx == 0) {
+                            //  Extract connection type
+                            printf("conn_type = %s\n", tok);
+                            memset(wi->connection_type, 0, MAX_CONN_TYPE_LEN);
+                            strncpy(wi->connection_type, tok, MAX_CONN_TYPE_LEN);
+                        } else if (idx == 1) {
+                            //  Extract driver name
+                            printf("driver_name = %s\n", tok);
+                            memset(wi->driver_name, 0, MAX_DRIVER_NAME_LEN);
+                            strncpy(wi->driver_name, tok, MAX_DRIVER_NAME_LEN);
+                        }
+                        idx++;
+                        tok = strtok(NULL, delim);
+                    }
+                }
+            }
+            closedir(dir);
+        }
+    }
+
+    return 0;
+}
+
 int get_wiphy(struct wifi_interface* wi) {
     struct nlmsghdr* nlh = mnl_nlmsg_put_header(nl_socket_buffer);
     struct genlmsghdr* genlh = (struct genlmsghdr*)mnl_nlmsg_put_extra_header(nlh, sizeof(struct genlmsghdr));
@@ -657,7 +709,6 @@ void* packet_capture_fn(void* arg) {
         EVP_DigestFinal_ex(mdctx, digest, &digest_len);
         EVP_MD_CTX_free(mdctx);
 
-        //TODO: compare packet hashes across capture threads to identify missing packets
         now = time(NULL);
         
         //  Update packets for this interface
@@ -769,6 +820,8 @@ int main(int argc, char* argv[]) {
         case 'c': {
             char* end;
             channel = strtoul(optarg, &end, 10);
+
+            //TODO: handle bands other than 2.4 GHz
             if (valid_channel(channel)) {
                 printf("Using channel %u\n", channel);
             } else {
@@ -852,6 +905,9 @@ int main(int argc, char* argv[]) {
     //  Configure interfaces
     for (int i = 0; i < num_interfaces; i++) {
         printf("Configuring (%d)%s\n", interfaces[i].ifindex, interfaces[i].ifname);
+
+        //  Read /sys to get connection type and driver
+        read_sys(&interfaces[i]);
 
         //  TODO: Remember initial interface mode and restore it when we're done
         printf("Getting info for %s\n", interfaces[i].ifname);
