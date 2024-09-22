@@ -131,7 +131,6 @@ void ht_resize(hash_table_t *ht, const int size) {
 
     const int new_alloc_size = get_alloc_size(size);
     const int old_size = ht->size;
-    const int old_count = ht->count;
 
     //  Make a temporary copy of the elements
     ht_element_t **tmp_elements = ht->elements;

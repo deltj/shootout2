@@ -4,7 +4,7 @@ project(shootout2)
 
 enable_testing()
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -g")
+set(CMAKE_C_FLAGS "-std=gnu11 -Wall -Wextra -g")
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
 

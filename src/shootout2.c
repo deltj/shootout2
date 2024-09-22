@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <time.h>
 
@@ -245,7 +246,7 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
                     case NL80211_ATTR_WIPHY_NAME:
                         tmp_str = mnl_attr_get_str(attr);
                         memset(tmp_wiphy_name, 0, MAX_WIPHY_NAME_LEN);
-                        strncpy(tmp_wiphy_name, tmp_str, MAX_WIPHY_NAME_LEN);
+                        memcpy(tmp_wiphy_name, tmp_str, mnl_attr_get_len(attr));
                         printf("WIPHY_NAME = %s\n", tmp_str);
                         break;
                     
@@ -275,7 +276,7 @@ int handle_message(const struct nlmsghdr* nlh, int len) {
                     case NL80211_ATTR_WIPHY_NAME:
                         tmp_str = mnl_attr_get_str(attr);
                         memset(tmp_wiphy_name, 0, MAX_WIPHY_NAME_LEN);
-                        strncpy(tmp_wiphy_name, tmp_str, MAX_WIPHY_NAME_LEN);
+                        memcpy(tmp_wiphy_name, tmp_str, mnl_attr_get_len(attr));
                         printf("WIPHY_NAME = %s\n", tmp_str);
                         break;
                     
@@ -450,12 +451,14 @@ int read_sys(struct wifi_interface* wi) {
                             //  Extract connection type
                             printf("conn_type = %s\n", tok);
                             memset(wi->connection_type, 0, MAX_CONN_TYPE_LEN);
-                            strncpy(wi->connection_type, tok, MAX_CONN_TYPE_LEN);
+                            const size_t copy_len = MIN(strlen(tok), MAX_CONN_TYPE_LEN - 1);
+                            memcpy(wi->connection_type, tok, copy_len);
                         } else if (idx == 1) {
                             //  Extract driver name
                             printf("driver_name = %s\n", tok);
                             memset(wi->driver_name, 0, MAX_DRIVER_NAME_LEN);
-                            strncpy(wi->driver_name, tok, MAX_DRIVER_NAME_LEN);
+                            const size_t copy_len = MIN(strlen(tok), MAX_DRIVER_NAME_LEN - 1);
+                            memcpy(wi->driver_name, tok, copy_len);
                         }
                         idx++;
                         tok = strtok(NULL, delim);
@@ -494,7 +497,8 @@ int get_wiphy(struct wifi_interface* wi) {
 
     wi->wiphy = tmp_wiphy;
     memset(wi->wiphy_name, 0, MAX_WIPHY_NAME_LEN);
-    strncpy(wi->wiphy_name, tmp_wiphy_name, MAX_WIPHY_NAME_LEN);
+    const size_t copy_len = MIN(strlen(tmp_wiphy_name), MAX_WIPHY_NAME_LEN - 1);
+    memcpy(wi->wiphy_name, tmp_wiphy_name, copy_len);
 
     return 0;
 }
@@ -838,7 +842,9 @@ int main(int argc, char* argv[]) {
             if (ifindex > 0) {
                 printf("Using interface %s\n", optarg);
                 memset(&interfaces[ai], 0, sizeof(struct wifi_interface));
-                strncpy(interfaces[ai].ifname, optarg, MAX_IF_NAME_LEN);
+                const size_t copy_len = MIN(strlen(optarg), MAX_IF_NAME_LEN - 1);
+                memcpy(interfaces[ai].ifname, optarg, copy_len);
+
                 interfaces[ai].ifindex = if_nametoindex(optarg);
                 interfaces[ai].ai = ai;
                 num_interfaces++;
